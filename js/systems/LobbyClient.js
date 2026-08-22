@@ -18,8 +18,12 @@ class LobbyClient {
     this.aoRede = () => {};
     /** Modo ONLINE: o servidor achou (ou abriu) uma sala para este jogador. */
     this.aoParear = () => {};
+    /** Código digitado que não existe no servidor. */
+    this.aoSalaNaoEncontrada = () => {};
     this.codigoDaSala = null;
     this.procurando = false;
+    /** "procurar" (fila) | "criar" (sala privada) | "codigo" | null (LAN) */
+    this.modoOnline = null;
     this.aoFechar = () => {};
     this.aoErro = () => {};
   }
@@ -44,7 +48,12 @@ class LobbyClient {
    */
   conectar(host, nome, opcoes) {
     this.nome = nome;
-    this.procurando = !!(opcoes && opcoes.procurar);
+    const o = opcoes || {};
+    // `procurar: true` continua valendo (chamada antiga); `modo` é o caminho
+    // novo, que distingue fila, sala criada e entrada por código.
+    this.modoOnline = o.modo || (o.procurar ? "procurar" : null);
+    this.codigoPedido = o.codigo || null;
+    this.procurando = this.modoOnline === "procurar";
     const manual = host && host.trim();
     this.candidatos = manual
       ? [manual.includes(":") ? manual : manual + ":" + LobbyClient.PORTA]
@@ -76,10 +85,16 @@ class LobbyClient {
       return;
     }
     const nome = this.nome;
-    this.socket.onopen = () =>
-      this.enviar(
-        this.procurando ? { t: "procurar", nome } : { t: "entrar", nome },
-      );
+    // A PRIMEIRA mensagem é o que separa os modos. O resto do protocolo (sala,
+    // partida, pacote de rede) é idêntico nos quatro casos.
+    this.socket.onopen = () => {
+      const m = this.modoOnline;
+      if (m === "procurar") return this.enviar({ t: "procurar", nome });
+      if (m === "criar") return this.enviar({ t: "criar", nome });
+      if (m === "codigo")
+        return this.enviar({ t: "entrar_codigo", nome, sala: this.codigoPedido });
+      this.enviar({ t: "entrar", nome }); // LAN: sala aberta do servidor
+    };
     this.socket.onmessage = (ev) => {
       const msg = JSON.parse(ev.data);
       if (msg.t === "rede") {
@@ -89,6 +104,11 @@ class LobbyClient {
       if (msg.t === "sala_encontrada") {
         this.codigoDaSala = msg.codigo;
         this.aoParear(msg);
+        return;
+      }
+      if (msg.t === "sala_nao_encontrada") {
+        this.codigoDaSala = null;
+        this.aoSalaNaoEncontrada(msg);
         return;
       }
       if (msg.t === "partida") {

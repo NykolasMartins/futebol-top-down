@@ -42,14 +42,29 @@ class MultiplayerScene extends Phaser.Scene {
       // Quem estava procurando partida volta para a tela ONLINE: jogar o
       // jogador na tela de LAN com uma mensagem sobre servidor online é
       // trocar o assunto no meio do erro.
-      if (this.tela !== "online") this.tela = "lan";
+      if (this.tela !== "online") {
+        this.tela = this.origemDaSala === "online" ? "online" : "lan";
+      }
       this.procurando = false;
       this.render();
     };
     // Online: o servidor achou a sala. Ainda não é partida — é o "achei, agora
     // espera o outro" que faz a tela mostrar o código em vez de "procurando".
     this.lobby.aoParear = () => {
-      if (this.tela === "online") this.render();
+      if (this.tela === "online" || this.tela === "sala") this.render();
+    };
+    // Código errado (ou sala que já começou): devolve para a tela online com o
+    // motivo. Sem isto o jogador ficaria olhando um lobby vazio para sempre,
+    // achando que o amigo é que não entrou.
+    this.lobby.aoSalaNaoEncontrada = (msg) => {
+      this.lobby.desconectar();
+      this.tela = "online";
+      this.procurando = false;
+      this.aviso =
+        msg && msg.motivo === "iniciada"
+          ? "Essa sala já começou a partida."
+          : "Não achei a sala " + (msg && msg.codigo ? msg.codigo : "") + ".";
+      this.render();
     };
     // O servidor manda um evento próprio quando a sala fecha a escalação.
     this.lobby.aoIniciar = (pacote) => this.abrirPartida(pacote);
@@ -58,7 +73,7 @@ class MultiplayerScene extends Phaser.Scene {
       if (this.indoParaPartida) return;
       if (this.tela === "sala") {
         this.aviso = "A conexão caiu.";
-        this.tela = "lan";
+        this.tela = this.origemDaSala === "online" ? "online" : "lan";
         this.render();
       } else if (this.tela === "online" && this.procurando) {
         this.aviso = "A conexão caiu.";
@@ -195,6 +210,15 @@ class MultiplayerScene extends Phaser.Scene {
    * espera — reaproveitar `telaSala()` aqui mostraria controles que ninguém
    * pode usar.
    */
+  /**
+   * Online tem três caminhos, e só o primeiro dispensa lobby:
+   *
+   *   PARTIDA RÁPIDA  fila 1v1, o servidor pareia e começa sozinho;
+   *   CRIAR SALA      sala privada com código — daí em diante é a MESMA tela
+   *                   de lobby da LAN (`telaSala`), com lado, posição e o
+   *                   capitão clicando INICIAR;
+   *   ENTRAR POR CÓDIGO  o convidado digita os 4 dígitos que o anfitrião ditou.
+   */
   telaOnline() {
     const codigo = this.lobby.codigoDaSala;
     return [
@@ -210,8 +234,14 @@ class MultiplayerScene extends Phaser.Scene {
             '  <div class="pui-mp-dica">SEU NOME EM CAMPO</div>',
             '  <input class="pui-input" id="mp-nick-online" maxlength="14" placeholder="Digite seu nick" value="' +
               this.nickSalvo() + '" />',
-            '  <button class="pui-btn pui-btn-green" id="mp-procurar">PROCURAR PARTIDA</button>',
-            '  <div class="pui-mp-dica">Você joga o pivô; o resto do time é bot dos dois lados.</div>',
+            '  <button class="pui-btn pui-btn-green" id="mp-procurar">PARTIDA RÁPIDA &nbsp;1v1</button>',
+            '  <div class="pui-mp-dica">Fila aberta: você joga o pivô, o resto do time é bot dos dois lados.</div>',
+            '  <button class="pui-btn pui-btn-gold" id="mp-criar-online">CRIAR SALA COM CÓDIGO</button>',
+            '  <div class="pui-mp-dica">Você vira o anfitrião e divulga o código de 4 dígitos.</div>',
+            '  <div class="pui-mp-linha">',
+            '    <input class="pui-input" id="mp-codigo" maxlength="4" inputmode="numeric" placeholder="0000" />',
+            '    <button class="pui-btn pui-btn-blue" id="mp-entrar-codigo">ENTRAR</button>',
+            "  </div>",
           ].join(""),
       this.aviso ? '<div class="pui-mp-aviso">' + this.aviso + "</div>" : "",
       '  <button class="pui-btn pui-btn-secondary" id="mp-voltar-modo">VOLTAR</button>',
@@ -257,7 +287,9 @@ class MultiplayerScene extends Phaser.Scene {
 
     return [
       '<div class="pui-mp-topo">',
-      '  <div class="pui-panel-title">SALA LAN</div>',
+      '  <div class="pui-panel-title">' +
+        (this.lobby.codigoDaSala ? "SALA " + this.lobby.codigoDaSala : "SALA LAN") +
+        "</div>",
       '  <div class="pui-mp-dica">' + total + " na sala" + (dono ? " · você criou" : "") + "</div>",
       "</div>",
       '<div class="pui-mp-times">',
@@ -369,6 +401,33 @@ class MultiplayerScene extends Phaser.Scene {
       this.procurando = false;
       return this.render();
     }
+    if (id === "mp-criar-online" || id === "mp-entrar-codigo") {
+      const nickEl = this.dom.node.querySelector("#mp-nick-online");
+      const nick = (nickEl && nickEl.value.trim()) || this.lerNick();
+      const criar = id === "mp-criar-online";
+      let codigo = null;
+      if (!criar) {
+        const campo = this.dom.node.querySelector("#mp-codigo");
+        codigo = (campo && campo.value) || "";
+        if (codigo.replace(/\D/g, "").length < 4) {
+          this.aviso = "Digite os 4 dígitos do código.";
+          return this.render();
+        }
+      }
+      // Sala com código usa o MESMO lobby da LAN — por isso a tela vira "sala".
+      // `origemDaSala` é o que faz VOLTAR e QUEDA devolverem para a tela certa:
+      // jogar quem estava online na tela de LAN é trocar o assunto.
+      this.origemDaSala = "online";
+      this.tela = "sala";
+      this.aviso = "";
+      this.render();
+      this.lobby.conectar(LobbyClient.ONLINE_HOST, nick, {
+        modo: criar ? "criar" : "codigo",
+        codigo,
+      });
+      return;
+    }
+
     if (id === "mp-procurar") {
       // Mesmo transporte da LAN; o que muda é a PRIMEIRA mensagem
       // (`procurar` em vez de `entrar`) e o endereço do servidor.
@@ -401,6 +460,7 @@ class MultiplayerScene extends Phaser.Scene {
       const campo = this.dom.node.querySelector("#mp-ip");
       const host = id === "mp-criar" ? "" : campo && campo.value;
       const nick = this.lerNick();
+      this.origemDaSala = "lan";
       this.tela = "sala";
       this.aviso = "";
       this.render();
@@ -410,7 +470,7 @@ class MultiplayerScene extends Phaser.Scene {
 
     if (id === "mp-sair") {
       this.lobby.desconectar();
-      this.tela = "lan";
+      this.tela = this.origemDaSala === "online" ? "online" : "lan";
       return this.render();
     }
     if (id === "mp-pronto") {
