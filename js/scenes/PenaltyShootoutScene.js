@@ -533,11 +533,11 @@ class PenaltyShootoutScene extends Phaser.Scene {
       if (!isDefense) {
         isGoal = true;
         // Efeito visual de gol (Rede)
-        this.cameras.main.shake(200, 0.005);
+        EfeitosVisuais.tremer(this, 200, 0.005);
         this.flashGoalNet();
       } else {
         // EFEITO DE DEFESA: A bola bate e vai para fora
-        this.cameras.main.shake(150, 0.008);
+        EfeitosVisuais.tremer(this, 150, 0.008);
         this.executeBallRebound();
       }
     } else if (isOut) {

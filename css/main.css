@@ -71,6 +71,14 @@ body {
   will-change: filter;
 }
 
+/* Veto do jogador (Configurações → MENUS CURVOS). Vem DEPOIS da regra acima
+   para vencer por ordem, sem precisar de `!important`: quem desligou não paga
+   a re-rasterização da camada DOM a cada repintura. */
+#game-container.sem-curvatura-ui.crt-menu-mode > div:not(.crt-grain):not(.crt-scratches) {
+  filter: none;
+  will-change: auto;
+}
+
 /* O CUSTO do filtro é por REPINTURA, não por frame — então o conserto é parar
    de repintar à toa enquanto ele está ligado. Estes três eram os motores de
    repintura contínua do menu: o brilho pulsante do logo (text-shadow animado,

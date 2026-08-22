@@ -2039,6 +2039,16 @@
    tela parecia lavada.
    A camada é 40% maior que a tela porque ela ANDA: sem a folga, o passeio
    abriria fresta na borda. Quem anda é só o ruído — imagem parada. */
+/* Título de seção dentro do painel de configurações. */
+.pui-config-sep {
+  font-size: 6px;
+  letter-spacing: 1px;
+  color: var(--pui-green-dim, #6a8f76);
+  border-bottom: 1px solid var(--pui-border, #1a3a1a);
+  padding: 10px 0 6px;
+  margin: 6px 0 2px;
+}
+
 .crt-grain {
   position: absolute;
   inset: -20%;

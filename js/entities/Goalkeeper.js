@@ -713,7 +713,7 @@ class Goalkeeper extends Phaser.Physics.Arcade.Sprite {
     );
     if (this.scene.spawnImpactDust)
       this.scene.spawnImpactDust(this.x, this.y, 0xffffff);
-    this.scene.cameras.main.shake(80, 0.0035);
+    EfeitosVisuais.tremer(this.scene, 80, 0.0035);
 
     const currentVel = ball.body.velocity.clone();
     const incomingSpeed = currentVel.length();

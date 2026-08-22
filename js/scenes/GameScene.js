@@ -1189,7 +1189,7 @@ class GameScene extends Phaser.Scene {
               victim.invulnerableTimer = 250;
               victim.customVel?.scale(0.35);
 
-              this.cameras.main.shake(90, 0.004);
+              EfeitosVisuais.tremer(this, 90, 0.004);
               // Hit Stop: o mesmo do roubo por contato, agora congelando também
               // os dois jogadores — antes só a bola parava.
               this.applyHitStop(tackler, victim);
@@ -1558,7 +1558,7 @@ class GameScene extends Phaser.Scene {
               this.ball.customVx *= 0.85;
               this.ball.customVy *= 0.85;
 
-              this.cameras.main.shake(300, 0.01);
+              EfeitosVisuais.tremer(this, 300, 0.01);
             } else {
               this.showFloatingText(
                 gk.x,
@@ -1566,7 +1566,7 @@ class GameScene extends Phaser.Scene {
                 "🧤 MÃO DE ALFACE! 🧤",
                 "#ff8800",
               );
-              this.cameras.main.shake(200, 0.005);
+              EfeitosVisuais.tremer(this, 200, 0.005);
             }
           }
         }
@@ -2009,7 +2009,7 @@ class GameScene extends Phaser.Scene {
             );
 
           // Efeito visual extra (flash na bola)
-          this.cameras.main.shake(100, 0.01);
+          EfeitosVisuais.tremer(this, 100, 0.01);
         }
 
         // Bola Curva não soma curva fixa: o efeito é decidido pelo arrasto do

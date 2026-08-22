@@ -82,6 +82,10 @@ class MenuScene extends Phaser.Scene {
             ◎ &nbsp; CONTINUAR CARREIRA
           </button>
 
+          <button class="pui-btn pui-btn-ghost" id="btn-efeitos" style="width:100%;height:44px;font-size:7px;">
+            ⚙ &nbsp; EFEITOS VISUAIS
+          </button>
+
           <div class="pui-menu-save-info" style="color:${saveInfoColor};">
             ${saveInfo}
           </div>
@@ -113,6 +117,11 @@ class MenuScene extends Phaser.Scene {
         this.cameras.main.once("camerafadeoutcomplete", () => {
           this.scene.start("ExhibitionMatchScene");
         });
+        return;
+      }
+
+      if (id === "btn-efeitos" || event.target.closest("#btn-efeitos")) {
+        this.abrirEfeitos();
         return;
       }
 
@@ -183,6 +192,44 @@ class MenuScene extends Phaser.Scene {
       }
       this.previousAButton = aButton;
     }
+  }
+
+  /**
+   * Efeitos visuais, aqui e na pausa da partida, com a MESMA lista: quem
+   * desenha os interruptores é o `EfeitosVisuais`, então efeito novo aparece
+   * nas duas telas sem ninguém lembrar de editar as duas.
+   *
+   * O modal é filho do container DOM do Phaser (1000x600, `overflow:hidden`) —
+   * mede em %, nunca em vw/vh, senão sai cortado em tela grande.
+   */
+  abrirEfeitos() {
+    if (this._efeitos) return;
+
+    const html =
+      '<div class="pui-modal-wrap" style="width:100%;height:100%;' +
+      'display:flex;align-items:center;justify-content:center;">' +
+      '<div class="pui-panel" style="width:72%;max-height:82%;overflow-y:auto;padding:18px;">' +
+      '<div class="pui-menu-logo pui-glow" style="font-size:11px;margin-bottom:6px;">EFEITOS VISUAIS</div>' +
+      '<div class="pui-config-hint" style="margin-bottom:10px;">' +
+      "Desligue o que pesar ou incomodar. A escolha fica salva neste navegador." +
+      "</div>" +
+      EfeitosVisuais.linhasHtml() +
+      '<button class="pui-btn pui-btn-ghost" id="btn-efeitos-fechar" ' +
+      'style="width:100%;height:40px;font-size:7px;margin-top:14px;">FECHAR</button>' +
+      "</div></div>";
+
+    this._efeitos = this.add.dom(500, 300).createFromHTML(html).setOrigin(0.5);
+    this._efeitos.addListener("click");
+    this._efeitos.on("click", (event) => {
+      if (EfeitosVisuais.tratarClique(event.target)) return;
+      if (event.target.closest("#btn-efeitos-fechar")) this.fecharEfeitos();
+    });
+  }
+
+  fecharEfeitos() {
+    if (!this._efeitos) return;
+    this._efeitos.destroy();
+    this._efeitos = null;
   }
 
   updateFocusedButton() {
