@@ -1,0 +1,145 @@
+{
+  "group_id": "7ae0d2b6-bf55-433d-8530-93fb46ac186e",
+  "states": [
+    {
+      "character": {
+        "id": "8769c0e6-3196-468d-a2f2-da901d21d509",
+        "name": "Idle",
+        "prompt": "2D pixel art sprite sheet of a soccer player running. The character must wear a vertically striped shirt alternating between bright magenta and bright cyan. There must be a small, solid bright neon green badge/logo on the left chest. The character wears neon yellow shorts, has orange skin, and bright purple hair. Strict pixel art style, clean flat shading with maximum 3 tones per material. Absolutely no gradients, no blur, and no anti-aliasing. Solid white background, cleanly separated animation frames in a grid.",
+        "size": {
+          "width": 68,
+          "height": 68
+        },
+        "template_id": "mannequin",
+        "directions": 8,
+        "view": "high top-down",
+        "created_at": "2026-08-12T03:18:39.484304+00:00"
+      },
+      "folder": "Idle",
+      "frames": {
+        "rotations": {
+          "south": "Idle/rotations/south.png",
+          "south-east": "Idle/rotations/south-east.png",
+          "east": "Idle/rotations/east.png",
+          "north-east": "Idle/rotations/north-east.png",
+          "north": "Idle/rotations/north.png",
+          "north-west": "Idle/rotations/north-west.png",
+          "west": "Idle/rotations/west.png",
+          "south-west": "Idle/rotations/south-west.png"
+        },
+        "animations": {
+          "shooting": {
+            "north": [
+              "Idle/animations/shooting/north/frame_000.png",
+              "Idle/animations/shooting/north/frame_001.png",
+              "Idle/animations/shooting/north/frame_002.png",
+              "Idle/animations/shooting/north/frame_003.png",
+              "Idle/animations/shooting/north/frame_004.png"
+            ],
+            "north-west": [
+              "Idle/animations/shooting/north-west/frame_000.png",
+              "Idle/animations/shooting/north-west/frame_001.png",
+              "Idle/animations/shooting/north-west/frame_002.png",
+              "Idle/animations/shooting/north-west/frame_003.png",
+              "Idle/animations/shooting/north-west/frame_004.png"
+            ],
+            "west": [
+              "Idle/animations/shooting/west/frame_000.png",
+              "Idle/animations/shooting/west/frame_001.png",
+              "Idle/animations/shooting/west/frame_002.png",
+              "Idle/animations/shooting/west/frame_003.png",
+              "Idle/animations/shooting/west/frame_004.png"
+            ],
+            "south-west": [
+              "Idle/animations/shooting/south-west/frame_000.png",
+              "Idle/animations/shooting/south-west/frame_001.png",
+              "Idle/animations/shooting/south-west/frame_002.png",
+              "Idle/animations/shooting/south-west/frame_003.png",
+              "Idle/animations/shooting/south-west/frame_004.png"
+            ],
+            "north-east": [
+              "Idle/animations/shooting/north-east/frame_000.png",
+              "Idle/animations/shooting/north-east/frame_001.png",
+              "Idle/animations/shooting/north-east/frame_002.png",
+              "Idle/animations/shooting/north-east/frame_003.png",
+              "Idle/animations/shooting/north-east/frame_004.png"
+            ],
+            "south": [
+              "Idle/animations/shooting/south/frame_000.png",
+              "Idle/animations/shooting/south/frame_001.png",
+              "Idle/animations/shooting/south/frame_002.png",
+              "Idle/animations/shooting/south/frame_003.png",
+              "Idle/animations/shooting/south/frame_004.png"
+            ],
+            "south-east": [
+              "Idle/animations/shooting/south-east/frame_000.png",
+              "Idle/animations/shooting/south-east/frame_001.png",
+              "Idle/animations/shooting/south-east/frame_002.png",
+              "Idle/animations/shooting/south-east/frame_003.png",
+              "Idle/animations/shooting/south-east/frame_004.png"
+            ],
+            "east": [
+              "Idle/animations/shooting/east/frame_000.png",
+              "Idle/animations/shooting/east/frame_001.png",
+              "Idle/animations/shooting/east/frame_002.png",
+              "Idle/animations/shooting/east/frame_003.png",
+              "Idle/animations/shooting/east/frame_004.png"
+            ]
+          },
+          "Running": {
+            "north": [
+              "Idle/animations/Running/north/frame_000.png",
+              "Idle/animations/Running/north/frame_001.png",
+              "Idle/animations/Running/north/frame_002.png",
+              "Idle/animations/Running/north/frame_003.png"
+            ],
+            "north-east": [
+              "Idle/animations/Running/north-east/frame_000.png",
+              "Idle/animations/Running/north-east/frame_001.png",
+              "Idle/animations/Running/north-east/frame_002.png",
+              "Idle/animations/Running/north-east/frame_003.png"
+            ],
+            "south-west": [
+              "Idle/animations/Running/south-west/frame_000.png",
+              "Idle/animations/Running/south-west/frame_001.png",
+              "Idle/animations/Running/south-west/frame_002.png",
+              "Idle/animations/Running/south-west/frame_003.png"
+            ],
+            "east": [
+              "Idle/animations/Running/east/frame_000.png",
+              "Idle/animations/Running/east/frame_001.png",
+              "Idle/animations/Running/east/frame_002.png",
+              "Idle/animations/Running/east/frame_003.png"
+            ],
+            "west": [
+              "Idle/animations/Running/west/frame_000.png",
+              "Idle/animations/Running/west/frame_001.png",
+              "Idle/animations/Running/west/frame_002.png",
+              "Idle/animations/Running/west/frame_003.png"
+            ],
+            "north-west": [
+              "Idle/animations/Running/north-west/frame_000.png",
+              "Idle/animations/Running/north-west/frame_001.png",
+              "Idle/animations/Running/north-west/frame_002.png",
+              "Idle/animations/Running/north-west/frame_003.png"
+            ],
+            "south-east": [
+              "Idle/animations/Running/south-east/frame_000.png",
+              "Idle/animations/Running/south-east/frame_001.png",
+              "Idle/animations/Running/south-east/frame_002.png",
+              "Idle/animations/Running/south-east/frame_003.png"
+            ],
+            "south": [
+              "Idle/animations/Running/south/frame_000.png",
+              "Idle/animations/Running/south/frame_001.png",
+              "Idle/animations/Running/south/frame_002.png",
+              "Idle/animations/Running/south/frame_003.png"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "export_version": "3.1",
+  "export_date": "2026-08-12T04:10:03.741526"
+}

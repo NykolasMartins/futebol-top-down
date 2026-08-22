@@ -1,0 +1,52 @@
+# Netlify — frontend estático do Futebol Top-Down.
+#
+# O jogo é HTML + JS solto: não há bundler, não há passo de build. `command`
+# vazio é intencional — build inventado é o jeito mais comum de um deploy
+# estático quebrar sozinho.
+[build]
+  publish = "."
+  command = ""
+
+# ── Escondendo a pasta do servidor ──────────────────────────────────────────
+# ATENÇÃO à diferença, que muda o que você pode esperar daqui:
+#
+#   • Este bloco torna `/server/*` INALCANÇÁVEL por HTTP (404 forçado).
+#   • Ele NÃO impede o upload: com `publish = "."`, o Netlify sobe a pasta
+#     inteira do repositório, incluindo `server/`. Os arquivos existem no CDN,
+#     só não são servidos.
+#
+# Para EXCLUIR de verdade, o caminho é outro: mover os estáticos para uma
+# subpasta (ex. `public/`) e apontar `publish = "public"`. Aí `server/` fica
+# fora do diretório publicado e nem é enviado.
+#
+# Nada disso é questão de segredo — não há credencial no `server/`, o código é
+# o mesmo que está no GitHub público. É arrumação.
+[[redirects]]
+  from = "/server/*"
+  to = "/nao-encontrado"
+  status = 404
+  force = true
+
+# ── Cache ───────────────────────────────────────────────────────────────────
+# Cache mordeu este projeto a sessão inteira (JS velho servido junto com JS
+# novo, e o sintoma nunca parece cache). Os scripts do jogo vão sem cache;
+# a arte, que quase não muda e é o grosso do peso, vai com cache longo.
+[[headers]]
+  for = "/js/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/css/*"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "no-cache"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"

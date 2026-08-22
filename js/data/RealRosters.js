@@ -1,0 +1,745 @@
+// =============================================================================
+// RealRosters.js — Banco local de elencos para o modo carreira
+// =============================================================================
+// Cada clube possui pelo menos 1 goleiro e 6 jogadores de linha. Os IDs são
+// estáveis para persistência de estatísticas globais no CareerMode.
+
+const REAL_ROSTERS = {
+  Flamengo: [
+    { id: "flamengo_rossi", name: "Agustín Rossi", position: "GK", rating: 82 },
+    { id: "flamengo_leo_pereira", name: "Léo Pereira", position: "DEF", rating: 80 },
+    { id: "flamengo_gerson", name: "Gerson", position: "MID", rating: 83 },
+    { id: "flamengo_arrascaeta", name: "Arrascaeta", position: "MID", rating: 84 },
+    { id: "flamengo_pedro", name: "Pedro", position: "FWD", rating: 84 },
+    { id: "flamengo_bruno_henrique", name: "Bruno Henrique", position: "FWD", rating: 80 },
+    { id: "flamengo_luiz_araujo", name: "Luiz Araújo", position: "FWD", rating: 79 },
+  ],
+  Palmeiras: [
+    { id: "palmeiras_weverton", name: "Weverton", position: "GK", rating: 82 },
+    { id: "palmeiras_gustavo_gomez", name: "Gustavo Gómez", position: "DEF", rating: 83 },
+    { id: "palmeiras_piquerez", name: "Piquerez", position: "DEF", rating: 80 },
+    { id: "palmeiras_anibal_moreno", name: "Aníbal Moreno", position: "MID", rating: 80 },
+    { id: "palmeiras_raphael_veiga", name: "Raphael Veiga", position: "MID", rating: 83 },
+    { id: "palmeiras_estevao", name: "Estêvão", position: "FWD", rating: 82 },
+    { id: "palmeiras_vitor_roque", name: "Vitor Roque", position: "FWD", rating: 81 },
+  ],
+  Sao_Paulo: [
+    { id: "sao_paulo_rafael", name: "Rafael", position: "GK", rating: 79 },
+    { id: "sao_paulo_arboleda", name: "Arboleda", position: "DEF", rating: 80 },
+    { id: "sao_paulo_welington", name: "Welington", position: "DEF", rating: 76 },
+    { id: "sao_paulo_lucas", name: "Lucas Moura", position: "MID", rating: 82 },
+    { id: "sao_paulo_oscar", name: "Oscar", position: "MID", rating: 81 },
+    { id: "sao_paulo_luciano", name: "Luciano", position: "FWD", rating: 79 },
+    { id: "sao_paulo_calleri", name: "Calleri", position: "FWD", rating: 81 },
+  ],
+  Corinthians: [
+    { id: "corinthians_hugo_souza", name: "Hugo Souza", position: "GK", rating: 78 },
+    { id: "corinthians_andre_ramalho", name: "André Ramalho", position: "DEF", rating: 79 },
+    { id: "corinthians_felix_torres", name: "Félix Torres", position: "DEF", rating: 77 },
+    { id: "corinthians_rodrigo_garro", name: "Rodrigo Garro", position: "MID", rating: 81 },
+    { id: "corinthians_maycon", name: "Maycon", position: "MID", rating: 77 },
+    { id: "corinthians_memphis", name: "Memphis Depay", position: "FWD", rating: 83 },
+    { id: "corinthians_yuri_alberto", name: "Yuri Alberto", position: "FWD", rating: 80 },
+  ],
+  Galo: [
+    { id: "galo_everson", name: "Everson", position: "GK", rating: 80 },
+    { id: "galo_lyanco", name: "Lyanco", position: "DEF", rating: 78 },
+    { id: "galo_guilherme_arana", name: "Guilherme Arana", position: "DEF", rating: 81 },
+    { id: "galo_alan_franco", name: "Alan Franco", position: "MID", rating: 78 },
+    { id: "galo_gustavo_scarpa", name: "Gustavo Scarpa", position: "MID", rating: 81 },
+    { id: "galo_hulk", name: "Hulk", position: "FWD", rating: 84 },
+    { id: "galo_rony", name: "Rony", position: "FWD", rating: 78 },
+  ],
+  Cruzeiro: [
+    { id: "cruzeiro_cassio", name: "Cássio", position: "GK", rating: 80 },
+    { id: "cruzeiro_fabricio_bruno", name: "Fabrício Bruno", position: "DEF", rating: 79 },
+    { id: "cruzeiro_william", name: "William", position: "DEF", rating: 77 },
+    { id: "cruzeiro_lucas_romero", name: "Lucas Romero", position: "MID", rating: 78 },
+    { id: "cruzeiro_matheus_pereira", name: "Matheus Pereira", position: "MID", rating: 82 },
+    { id: "cruzeiro_gabigol", name: "Gabigol", position: "FWD", rating: 81 },
+    { id: "cruzeiro_kaio_jorge", name: "Kaio Jorge", position: "FWD", rating: 78 },
+  ],
+  Gremio: [
+    { id: "gremio_marchesin", name: "Marchesín", position: "GK", rating: 78 },
+    { id: "gremio_kannemann", name: "Kannemann", position: "DEF", rating: 78 },
+    { id: "gremio_joao_pedro", name: "João Pedro", position: "DEF", rating: 76 },
+    { id: "gremio_villasanti", name: "Villasanti", position: "MID", rating: 80 },
+    { id: "gremio_cristaldo", name: "Cristaldo", position: "MID", rating: 79 },
+    { id: "gremio_braithwaite", name: "Braithwaite", position: "FWD", rating: 80 },
+    { id: "gremio_pavon", name: "Pavón", position: "FWD", rating: 77 },
+  ],
+  Inter: [
+    { id: "inter_rochet", name: "Rochet", position: "GK", rating: 80 },
+    { id: "inter_vitao", name: "Vitão", position: "DEF", rating: 78 },
+    { id: "inter_bernabei", name: "Bernabei", position: "DEF", rating: 77 },
+    { id: "inter_brunohenrique", name: "Bruno Henrique", position: "MID", rating: 78 },
+    { id: "inter_alan_patrick", name: "Alan Patrick", position: "MID", rating: 82 },
+    { id: "inter_borre", name: "Borré", position: "FWD", rating: 81 },
+    { id: "inter_wesley", name: "Wesley", position: "FWD", rating: 78 },
+  ],
+  Fluminense: [
+    { id: "fluminense_fabio", name: "Fábio", position: "GK", rating: 79 },
+    { id: "fluminense_thiago_silva", name: "Thiago Silva", position: "DEF", rating: 84 },
+    { id: "fluminense_samuel_xavier", name: "Samuel Xavier", position: "DEF", rating: 77 },
+    { id: "fluminense_martinelli", name: "Martinelli", position: "MID", rating: 78 },
+    { id: "fluminense_ganso", name: "Ganso", position: "MID", rating: 80 },
+    { id: "fluminense_arias", name: "Jhon Arias", position: "FWD", rating: 82 },
+    { id: "fluminense_cano", name: "Germán Cano", position: "FWD", rating: 81 },
+  ],
+  Botafogo: [
+    { id: "botafogo_john", name: "John", position: "GK", rating: 79 },
+    { id: "botafogo_bastos", name: "Bastos", position: "DEF", rating: 78 },
+    { id: "botafogo_alex_telles", name: "Alex Telles", position: "DEF", rating: 80 },
+    { id: "botafogo_marlon_freitas", name: "Marlon Freitas", position: "MID", rating: 79 },
+    { id: "botafogo_savarino", name: "Savarino", position: "MID", rating: 80 },
+    { id: "botafogo_artur", name: "Artur", position: "FWD", rating: 80 },
+    { id: "botafogo_igor_jesus", name: "Igor Jesus", position: "FWD", rating: 81 },
+  ],
+  Santos: [
+    { id: "santos_gabriel_brazao", name: "Gabriel Brazão", position: "GK", rating: 76 },
+    { id: "santos_gil", name: "Gil", position: "DEF", rating: 78 },
+    { id: "santos_ze_rafael", name: "Zé Rafael", position: "MID", rating: 79 },
+    { id: "santos_joao_schmidt", name: "João Schmidt", position: "MID", rating: 77 },
+    { id: "santos_neymar", name: "Neymar", position: "FWD", rating: 85 },
+    { id: "santos_tiquinho", name: "Tiquinho Soares", position: "FWD", rating: 80 },
+    { id: "santos_guilherme", name: "Guilherme", position: "FWD", rating: 77 },
+  ],
+  Vasco: [
+    { id: "vasco_leo_jardim", name: "Léo Jardim", position: "GK", rating: 79 },
+    { id: "vasco_joao_victor", name: "João Victor", position: "DEF", rating: 77 },
+    { id: "vasco_lucas_piton", name: "Lucas Piton", position: "DEF", rating: 78 },
+    { id: "vasco_hugo_moura", name: "Hugo Moura", position: "MID", rating: 76 },
+    { id: "vasco_philippe_coutinho", name: "Philippe Coutinho", position: "MID", rating: 81 },
+    { id: "vasco_dimitri_payet", name: "Dimitri Payet", position: "MID", rating: 80 },
+    { id: "vasco_vegetti", name: "Vegetti", position: "FWD", rating: 80 },
+  ],
+  Bahia: [
+    { id: "bahia_marcos_felipe", name: "Marcos Felipe", position: "GK", rating: 77 },
+    { id: "bahia_santiago_arias", name: "Santiago Arias", position: "DEF", rating: 78 },
+    { id: "bahia_kanu", name: "Kanu", position: "DEF", rating: 76 },
+    { id: "bahia_jean_lucas", name: "Jean Lucas", position: "MID", rating: 79 },
+    { id: "bahia_everton_ribeiro", name: "Everton Ribeiro", position: "MID", rating: 81 },
+    { id: "bahia_cauly", name: "Cauly", position: "MID", rating: 80 },
+    { id: "bahia_willian_jose", name: "Willian José", position: "FWD", rating: 79 },
+  ],
+  Fortaleza: [
+    { id: "fortaleza_joao_ricardo", name: "João Ricardo", position: "GK", rating: 77 },
+    { id: "fortaleza_britez", name: "Brítez", position: "DEF", rating: 76 },
+    { id: "fortaleza_titi", name: "Titi", position: "DEF", rating: 76 },
+    { id: "fortaleza_ze_welison", name: "Zé Welison", position: "MID", rating: 76 },
+    { id: "fortaleza_pikachu", name: "Yago Pikachu", position: "MID", rating: 78 },
+    { id: "fortaleza_lucero", name: "Lucero", position: "FWD", rating: 79 },
+    { id: "fortaleza_moises", name: "Moisés", position: "FWD", rating: 77 },
+  ],
+  Mirassol: [
+    { id: "mirassol_alex_muralha", name: "Alex Muralha", position: "GK", rating: 73 },
+    { id: "mirassol_lucas_ramon", name: "Lucas Ramon", position: "DEF", rating: 71 },
+    { id: "mirassol_reinaldo", name: "Reinaldo", position: "DEF", rating: 72 },
+    { id: "mirassol_neto_moura", name: "Neto Moura", position: "MID", rating: 73 },
+    { id: "mirassol_danielzinho", name: "Danielzinho", position: "MID", rating: 72 },
+    { id: "mirassol_gabriel", name: "Gabriel", position: "FWD", rating: 73 },
+    { id: "mirassol_negueba", name: "Negueba", position: "FWD", rating: 72 },
+  ],
+  Remo: [
+    { id: "remo_marcelo_rangel", name: "Marcelo Rangel", position: "GK", rating: 72 },
+    { id: "remo_jonilson", name: "Jonilson", position: "DEF", rating: 70 },
+    { id: "remo_kevyn", name: "Kevyn", position: "DEF", rating: 70 },
+    { id: "remo_douglas_packer", name: "Douglas Packer", position: "MID", rating: 72 },
+    { id: "remo_rodrigo_andrade", name: "Rodrigo Andrade", position: "MID", rating: 71 },
+    { id: "remo_pedro_rocha", name: "Pedro Rocha", position: "FWD", rating: 73 },
+    { id: "remo_ytalo", name: "Ytalo", position: "FWD", rating: 72 },
+  ],
+  Arsenal: [
+    { id: "arsenal_david_raya", name: "David Raya", position: "GK", rating: 84 },
+    { id: "arsenal_william_saliba", name: "William Saliba", position: "DEF", rating: 86 },
+    { id: "arsenal_gabriel_magalh_es", name: "Gabriel Magalhães", position: "DEF", rating: 85 },
+    { id: "arsenal_declan_rice", name: "Declan Rice", position: "MID", rating: 86 },
+    { id: "arsenal_martin_degaard", name: "Martin Ødegaard", position: "MID", rating: 87 },
+    { id: "arsenal_bukayo_saka", name: "Bukayo Saka", position: "FWD", rating: 87 },
+    { id: "arsenal_kai_havertz", name: "Kai Havertz", position: "FWD", rating: 83 },
+  ],
+  Chelsea: [
+    { id: "chelsea_robert_s_nchez", name: "Robert Sánchez", position: "GK", rating: 79 },
+    { id: "chelsea_levi_colwill", name: "Levi Colwill", position: "DEF", rating: 81 },
+    { id: "chelsea_wesley_fofana", name: "Wesley Fofana", position: "DEF", rating: 81 },
+    { id: "chelsea_mois_s_caicedo", name: "Moisés Caicedo", position: "MID", rating: 84 },
+    { id: "chelsea_enzo_fern_ndez", name: "Enzo Fernández", position: "MID", rating: 84 },
+    { id: "chelsea_cole_palmer", name: "Cole Palmer", position: "FWD", rating: 86 },
+    { id: "chelsea_nicolas_jackson", name: "Nicolas Jackson", position: "FWD", rating: 80 },
+  ],
+  man_city: [
+    { id: "man_city_ederson", name: "Ederson", position: "GK", rating: 87 },
+    { id: "man_city_r_ben_dias", name: "Rúben Dias", position: "DEF", rating: 88 },
+    { id: "man_city_jo_ko_gvardiol", name: "Joško Gvardiol", position: "DEF", rating: 85 },
+    { id: "man_city_rodri", name: "Rodri", position: "MID", rating: 90 },
+    { id: "man_city_kevin_de_bruyne", name: "Kevin De Bruyne", position: "MID", rating: 88 },
+    { id: "man_city_erling_haaland", name: "Erling Haaland", position: "FWD", rating: 91 },
+    { id: "man_city_phil_foden", name: "Phil Foden", position: "FWD", rating: 87 },
+  ],
+  liverpool: [
+    { id: "liverpool_alisson_becker", name: "Alisson Becker", position: "GK", rating: 89 },
+    { id: "liverpool_virgil_van_dijk", name: "Virgil van Dijk", position: "DEF", rating: 89 },
+    { id: "liverpool_ibrahima_konat", name: "Ibrahima Konaté", position: "DEF", rating: 84 },
+    { id: "liverpool_alexis_mac_allister", name: "Alexis Mac Allister", position: "MID", rating: 85 },
+    { id: "liverpool_dominik_szoboszlai", name: "Dominik Szoboszlai", position: "MID", rating: 83 },
+    { id: "liverpool_mohamed_salah", name: "Mohamed Salah", position: "FWD", rating: 90 },
+    { id: "liverpool_luis_d_az", name: "Luis Díaz", position: "FWD", rating: 85 },
+  ],
+  man_united: [
+    { id: "man_united_andr_onana", name: "André Onana", position: "GK", rating: 82 },
+    { id: "man_united_lisandro_mart_nez", name: "Lisandro Martínez", position: "DEF", rating: 84 },
+    { id: "man_united_luke_shaw", name: "Luke Shaw", position: "DEF", rating: 82 },
+    { id: "man_united_casemiro", name: "Casemiro", position: "MID", rating: 83 },
+    { id: "man_united_bruno_fernandes", name: "Bruno Fernandes", position: "MID", rating: 87 },
+    { id: "man_united_marcus_rashford", name: "Marcus Rashford", position: "FWD", rating: 83 },
+    { id: "man_united_rasmus_h_jlund", name: "Rasmus Højlund", position: "FWD", rating: 79 },
+  ],
+  tottenham: [
+    { id: "tottenham_guglielmo_vicario", name: "Guglielmo Vicario", position: "GK", rating: 83 },
+    { id: "tottenham_cristian_romero", name: "Cristian Romero", position: "DEF", rating: 86 },
+    { id: "tottenham_micky_van_de_ven", name: "Micky van de Ven", position: "DEF", rating: 83 },
+    { id: "tottenham_yves_bissouma", name: "Yves Bissouma", position: "MID", rating: 81 },
+    { id: "tottenham_james_maddison", name: "James Maddison", position: "MID", rating: 83 },
+    { id: "tottenham_son_heung_min", name: "Son Heung-min", position: "FWD", rating: 86 },
+    { id: "tottenham_dominic_solanke", name: "Dominic Solanke", position: "FWD", rating: 81 },
+  ],
+  newcastle: [
+    { id: "newcastle_nick_pope", name: "Nick Pope", position: "GK", rating: 81 },
+    { id: "newcastle_sven_botman", name: "Sven Botman", position: "DEF", rating: 82 },
+    { id: "newcastle_kieran_trippier", name: "Kieran Trippier", position: "DEF", rating: 82 },
+    { id: "newcastle_bruno_guimar_es", name: "Bruno Guimarães", position: "MID", rating: 85 },
+    { id: "newcastle_sandro_tonali", name: "Sandro Tonali", position: "MID", rating: 82 },
+    { id: "newcastle_alexander_isak", name: "Alexander Isak", position: "FWD", rating: 86 },
+    { id: "newcastle_anthony_gordon", name: "Anthony Gordon", position: "FWD", rating: 82 },
+  ],
+  aston_villa: [
+    { id: "aston_villa_emiliano_mart_nez", name: "Emiliano Martínez", position: "GK", rating: 85 },
+    { id: "aston_villa_ezri_konsa", name: "Ezri Konsa", position: "DEF", rating: 81 },
+    { id: "aston_villa_pau_torres", name: "Pau Torres", position: "DEF", rating: 82 },
+    { id: "aston_villa_boubacar_kamara", name: "Boubacar Kamara", position: "MID", rating: 81 },
+    { id: "aston_villa_john_mcginn", name: "John McGinn", position: "MID", rating: 81 },
+    { id: "aston_villa_ollie_watkins", name: "Ollie Watkins", position: "FWD", rating: 84 },
+    { id: "aston_villa_morgan_rogers", name: "Morgan Rogers", position: "FWD", rating: 78 },
+  ],
+  brighton: [
+    { id: "brighton_bart_verbruggen", name: "Bart Verbruggen", position: "GK", rating: 78 },
+    { id: "brighton_jan_paul_van_hecke", name: "Jan Paul van Hecke", position: "DEF", rating: 79 },
+    { id: "brighton_pervis_estupi_n", name: "Pervis Estupiñán", position: "DEF", rating: 80 },
+    { id: "brighton_billy_gilmour", name: "Billy Gilmour", position: "MID", rating: 77 },
+    { id: "brighton_pascal_gro", name: "Pascal Groß", position: "MID", rating: 79 },
+    { id: "brighton_kaoru_mitoma", name: "Kaoru Mitoma", position: "FWD", rating: 82 },
+    { id: "brighton_jo_o_pedro", name: "João Pedro", position: "FWD", rating: 79 },
+  ],
+  west_ham: [
+    { id: "west_ham_alphonse_areola", name: "Alphonse Areola", position: "GK", rating: 80 },
+    { id: "west_ham_kurt_zouma", name: "Kurt Zouma", position: "DEF", rating: 78 },
+    { id: "west_ham_vladim_r_coufal", name: "Vladimír Coufal", position: "DEF", rating: 76 },
+    { id: "west_ham_tom_sou_ek", name: "Tomáš Souček", position: "MID", rating: 79 },
+    { id: "west_ham_lucas_paquet", name: "Lucas Paquetá", position: "MID", rating: 83 },
+    { id: "west_ham_jarrod_bowen", name: "Jarrod Bowen", position: "FWD", rating: 83 },
+    { id: "west_ham_mohammed_kudus", name: "Mohammed Kudus", position: "FWD", rating: 82 },
+  ],
+  Real_Madrid: [
+    { id: "real_madrid_thibaut_courtois", name: "Thibaut Courtois", position: "GK", rating: 89 },
+    { id: "real_madrid_antonio_r_diger", name: "Antonio Rüdiger", position: "DEF", rating: 86 },
+    { id: "real_madrid_daniel_carvajal", name: "Daniel Carvajal", position: "DEF", rating: 86 },
+    { id: "real_madrid_federico_valverde", name: "Federico Valverde", position: "MID", rating: 88 },
+    { id: "real_madrid_jude_bellingham", name: "Jude Bellingham", position: "MID", rating: 89 },
+    { id: "real_madrid_vin_cius_j_nior", name: "Vinícius Júnior", position: "FWD", rating: 90 },
+    { id: "real_madrid_kylian_mbapp", name: "Kylian Mbappé", position: "FWD", rating: 91 },
+  ],
+  Valencia: [
+    { id: "valencia_giorgi_mamardashvili", name: "Giorgi Mamardashvili", position: "GK", rating: 83 },
+    { id: "valencia_cristhian_mosquera", name: "Cristhian Mosquera", position: "DEF", rating: 77 },
+    { id: "valencia_dimitri_foulquier", name: "Dimitri Foulquier", position: "DEF", rating: 75 },
+    { id: "valencia_pepelu", name: "Pepelu", position: "MID", rating: 77 },
+    { id: "valencia_javi_guerra", name: "Javi Guerra", position: "MID", rating: 78 },
+    { id: "valencia_hugo_duro", name: "Hugo Duro", position: "FWD", rating: 76 },
+    { id: "valencia_diego_l_pez", name: "Diego López", position: "FWD", rating: 75 },
+  ],
+  barcelona: [
+    { id: "barcelona_marc_andr_ter_stegen", name: "Marc-André ter Stegen", position: "GK", rating: 87 },
+    { id: "barcelona_pau_cubars", name: "Pau Cubarsí", position: "DEF", rating: 82 },
+    { id: "barcelona_alejandro_balde", name: "Alejandro Balde", position: "DEF", rating: 81 },
+    { id: "barcelona_pedri", name: "Pedri", position: "MID", rating: 87 },
+    { id: "barcelona_frenkie_de_jong", name: "Frenkie de Jong", position: "MID", rating: 85 },
+    { id: "barcelona_robert_lewandowski", name: "Robert Lewandowski", position: "FWD", rating: 87 },
+    { id: "barcelona_lamine_yamal", name: "Lamine Yamal", position: "FWD", rating: 87 },
+  ],
+  atletico_madrid: [
+    { id: "atletico_madrid_jan_oblak", name: "Jan Oblak", position: "GK", rating: 87 },
+    { id: "atletico_madrid_jos_mar_a_gim_nez", name: "José María Giménez", position: "DEF", rating: 84 },
+    { id: "atletico_madrid_reinildo_mandava", name: "Reinildo Mandava", position: "DEF", rating: 79 },
+    { id: "atletico_madrid_rodrigo_de_paul", name: "Rodrigo De Paul", position: "MID", rating: 83 },
+    { id: "atletico_madrid_pablo_barrios", name: "Pablo Barrios", position: "MID", rating: 80 },
+    { id: "atletico_madrid_antoine_griezmann", name: "Antoine Griezmann", position: "FWD", rating: 87 },
+    { id: "atletico_madrid_juli_n_lvarez", name: "Julián Álvarez", position: "FWD", rating: 85 },
+  ],
+  athletic_bilbao: [
+    { id: "athletic_bilbao_unai_sim_n", name: "Unai Simón", position: "GK", rating: 85 },
+    { id: "athletic_bilbao_daniel_vivian", name: "Daniel Vivian", position: "DEF", rating: 81 },
+    { id: "athletic_bilbao_yuri_berchiche", name: "Yuri Berchiche", position: "DEF", rating: 78 },
+    { id: "athletic_bilbao_mikel_ruiz_de_galarreta", name: "Mikel Ruiz de Galarreta", position: "MID", rating: 78 },
+    { id: "athletic_bilbao_oihan_sancet", name: "Oihan Sancet", position: "MID", rating: 82 },
+    { id: "athletic_bilbao_nico_williams", name: "Nico Williams", position: "FWD", rating: 85 },
+    { id: "athletic_bilbao_gorka_guruzeta", name: "Gorka Guruzeta", position: "FWD", rating: 77 },
+  ],
+  real_sociedad: [
+    { id: "real_sociedad_lex_remiro", name: "Álex Remiro", position: "GK", rating: 84 },
+    { id: "real_sociedad_igor_zubeldia", name: "Igor Zubeldia", position: "DEF", rating: 80 },
+    { id: "real_sociedad_jon_aramburu", name: "Jon Aramburu", position: "DEF", rating: 75 },
+    { id: "real_sociedad_mart_n_zubimendi", name: "Martín Zubimendi", position: "MID", rating: 85 },
+    { id: "real_sociedad_brais_m_ndez", name: "Brais Méndez", position: "MID", rating: 81 },
+    { id: "real_sociedad_mikel_oyarzabal", name: "Mikel Oyarzabal", position: "FWD", rating: 84 },
+    { id: "real_sociedad_takefusa_kubo", name: "Takefusa Kubo", position: "FWD", rating: 83 },
+  ],
+  betis: [
+    { id: "betis_rui_silva", name: "Rui Silva", position: "GK", rating: 80 },
+    { id: "betis_marc_bartra", name: "Marc Bartra", position: "DEF", rating: 78 },
+    { id: "betis_romain_perraud", name: "Romain Perraud", position: "DEF", rating: 76 },
+    { id: "betis_johnny_cardoso", name: "Johnny Cardoso", position: "MID", rating: 78 },
+    { id: "betis_isco", name: "Isco", position: "MID", rating: 84 },
+    { id: "betis_abde_ezzalzouli", name: "Abde Ezzalzouli", position: "FWD", rating: 79 },
+    { id: "betis_vitor_roque", name: "Vitor Roque", position: "FWD", rating: 77 },
+  ],
+  villarreal: [
+    { id: "villarreal_filip_j_rgensen", name: "Filip Jörgensen", position: "GK", rating: 78 },
+    { id: "villarreal_juan_foyth", name: "Juan Foyth", position: "DEF", rating: 82 },
+    { id: "villarreal_sergi_cardona", name: "Sergi Cardona", position: "DEF", rating: 76 },
+    { id: "villarreal_dani_parejo", name: "Dani Parejo", position: "MID", rating: 83 },
+    { id: "villarreal_santi_comesa_a", name: "Santi Comesaña", position: "MID", rating: 77 },
+    { id: "villarreal_nicolas_p_p", name: "Nicolas Pépé", position: "FWD", rating: 78 },
+    { id: "villarreal_thierno_barry", name: "Thierno Barry", position: "FWD", rating: 75 },
+  ],
+  sevilla: [
+    { id: "sevilla_rjan_nyland", name: "Ørjan Nyland", position: "GK", rating: 77 },
+    { id: "sevilla_lo_c_bad", name: "Loïc Badé", position: "DEF", rating: 80 },
+    { id: "sevilla_adri_pedrosa", name: "Adrià Pedrosa", position: "DEF", rating: 75 },
+    { id: "sevilla_djibril_sow", name: "Djibril Sow", position: "MID", rating: 78 },
+    { id: "sevilla_sa_l_guez", name: "Saúl Ñíguez", position: "MID", rating: 79 },
+    { id: "sevilla_dodi_lukebakio", name: "Dodi Lukebakio", position: "FWD", rating: 80 },
+    { id: "sevilla_isaac_romero", name: "Isaac Romero", position: "FWD", rating: 76 },
+  ],
+  girona: [
+    { id: "girona_paulo_gazzaniga", name: "Paulo Gazzaniga", position: "GK", rating: 78 },
+    { id: "girona_david_l_pez", name: "David López", position: "DEF", rating: 76 },
+    { id: "girona_miguel_guti_rrez", name: "Miguel Gutiérrez", position: "DEF", rating: 79 },
+    { id: "girona_yangel_herrera", name: "Yangel Herrera", position: "MID", rating: 78 },
+    { id: "girona_viktor_tsygankov", name: "Viktor Tsygankov", position: "MID", rating: 81 },
+    { id: "girona_cristhian_stuani", name: "Cristhian Stuani", position: "FWD", rating: 76 },
+    { id: "girona_arnaut_danjuma", name: "Arnaut Danjuma", position: "FWD", rating: 77 },
+  ],
+  inter_milan: [
+    { id: "inter_milan_yann_sommer", name: "Yann Sommer", position: "GK", rating: 84 },
+    { id: "inter_milan_alessandro_bastoni", name: "Alessandro Bastoni", position: "DEF", rating: 86 },
+    { id: "inter_milan_benjamin_pavard", name: "Benjamin Pavard", position: "DEF", rating: 83 },
+    { id: "inter_milan_nicol_barella", name: "Nicolò Barella", position: "MID", rating: 87 },
+    { id: "inter_milan_hakan_alhano_lu", name: "Hakan Çalhanoğlu", position: "MID", rating: 86 },
+    { id: "inter_milan_lautaro_mart_nez", name: "Lautaro Martínez", position: "FWD", rating: 88 },
+    { id: "inter_milan_marcus_thuram", name: "Marcus Thuram", position: "FWD", rating: 84 },
+  ],
+  milan: [
+    { id: "milan_mike_maignan", name: "Mike Maignan", position: "GK", rating: 87 },
+    { id: "milan_fikayo_tomori", name: "Fikayo Tomori", position: "DEF", rating: 83 },
+    { id: "milan_theo_hern_ndez", name: "Theo Hernández", position: "DEF", rating: 85 },
+    { id: "milan_tijjani_reijnders", name: "Tijjani Reijnders", position: "MID", rating: 83 },
+    { id: "milan_youssouf_fofana", name: "Youssouf Fofana", position: "MID", rating: 81 },
+    { id: "milan_rafael_le_o", name: "Rafael Leão", position: "FWD", rating: 86 },
+    { id: "milan_christian_pulisic", name: "Christian Pulisic", position: "FWD", rating: 84 },
+  ],
+  juventus: [
+    { id: "juventus_michele_di_gregorio", name: "Michele Di Gregorio", position: "GK", rating: 82 },
+    { id: "juventus_gleison_bremer", name: "Gleison Bremer", position: "DEF", rating: 85 },
+    { id: "juventus_andrea_cambiaso", name: "Andrea Cambiaso", position: "DEF", rating: 82 },
+    { id: "juventus_manuel_locatelli", name: "Manuel Locatelli", position: "MID", rating: 82 },
+    { id: "juventus_kh_phren_thuram", name: "Khéphren Thuram", position: "MID", rating: 81 },
+    { id: "juventus_du_an_vlahovi", name: "Dušan Vlahović", position: "FWD", rating: 84 },
+    { id: "juventus_kenan_y_ld_z", name: "Kenan Yıldız", position: "FWD", rating: 80 },
+  ],
+  napoli: [
+    { id: "napoli_alex_meret", name: "Alex Meret", position: "GK", rating: 82 },
+    { id: "napoli_amir_rrahmani", name: "Amir Rrahmani", position: "DEF", rating: 82 },
+    { id: "napoli_giovanni_di_lorenzo", name: "Giovanni Di Lorenzo", position: "DEF", rating: 84 },
+    { id: "napoli_stanislav_lobotka", name: "Stanislav Lobotka", position: "MID", rating: 84 },
+    { id: "napoli_scott_mctominay", name: "Scott McTominay", position: "MID", rating: 81 },
+    { id: "napoli_romelu_lukaku", name: "Romelu Lukaku", position: "FWD", rating: 84 },
+    { id: "napoli_khvicha_kvaratskhelia", name: "Khvicha Kvaratskhelia", position: "FWD", rating: 86 },
+  ],
+  roma: [
+    { id: "roma_mile_svilar", name: "Mile Svilar", position: "GK", rating: 80 },
+    { id: "roma_gianluca_mancini", name: "Gianluca Mancini", position: "DEF", rating: 81 },
+    { id: "roma_evan_ndicka", name: "Evan Ndicka", position: "DEF", rating: 80 },
+    { id: "roma_bryan_cristante", name: "Bryan Cristante", position: "MID", rating: 80 },
+    { id: "roma_lorenzo_pellegrini", name: "Lorenzo Pellegrini", position: "MID", rating: 82 },
+    { id: "roma_paulo_dybala", name: "Paulo Dybala", position: "FWD", rating: 85 },
+    { id: "roma_artem_dovbyk", name: "Artem Dovbyk", position: "FWD", rating: 81 },
+  ],
+  lazio: [
+    { id: "lazio_ivan_provedel", name: "Ivan Provedel", position: "GK", rating: 82 },
+    { id: "lazio_alessio_romagnoli", name: "Alessio Romagnoli", position: "DEF", rating: 82 },
+    { id: "lazio_adam_maru_i", name: "Adam Marušić", position: "DEF", rating: 78 },
+    { id: "lazio_matteo_guendouzi", name: "Matteo Guendouzi", position: "MID", rating: 81 },
+    { id: "lazio_nicol_rovella", name: "Nicolò Rovella", position: "MID", rating: 79 },
+    { id: "lazio_mattia_zaccagni", name: "Mattia Zaccagni", position: "FWD", rating: 83 },
+    { id: "lazio_valent_n_castellanos", name: "Valentín Castellanos", position: "FWD", rating: 79 },
+  ],
+  atalanta: [
+    { id: "atalanta_marco_carnesecchi", name: "Marco Carnesecchi", position: "GK", rating: 81 },
+    { id: "atalanta_berat_djimsiti", name: "Berat Djimsiti", position: "DEF", rating: 80 },
+    { id: "atalanta_isak_hien", name: "Isak Hien", position: "DEF", rating: 79 },
+    { id: "atalanta_marten_de_roon", name: "Marten de Roon", position: "MID", rating: 81 },
+    { id: "atalanta_derson", name: "Éderson", position: "MID", rating: 82 },
+    { id: "atalanta_ademola_lookman", name: "Ademola Lookman", position: "FWD", rating: 85 },
+    { id: "atalanta_mateo_retegui", name: "Mateo Retegui", position: "FWD", rating: 82 },
+  ],
+  fiorentina: [
+    { id: "fiorentina_david_de_gea", name: "David de Gea", position: "GK", rating: 82 },
+    { id: "fiorentina_luca_ranieri", name: "Luca Ranieri", position: "DEF", rating: 77 },
+    { id: "fiorentina_dod", name: "Dodô", position: "DEF", rating: 79 },
+    { id: "fiorentina_yacine_adli", name: "Yacine Adli", position: "MID", rating: 78 },
+    { id: "fiorentina_danilo_cataldi", name: "Danilo Cataldi", position: "MID", rating: 77 },
+    { id: "fiorentina_moise_kean", name: "Moise Kean", position: "FWD", rating: 82 },
+    { id: "fiorentina_albert_gudmundsson", name: "Albert Gudmundsson", position: "FWD", rating: 80 },
+  ],
+  bologna: [
+    { id: "bologna_ukasz_skorupski", name: "Łukasz Skorupski", position: "GK", rating: 79 },
+    { id: "bologna_sam_beukema", name: "Sam Beukema", position: "DEF", rating: 78 },
+    { id: "bologna_jhon_lucum", name: "Jhon Lucumí", position: "DEF", rating: 79 },
+    { id: "bologna_remo_freuler", name: "Remo Freuler", position: "MID", rating: 79 },
+    { id: "bologna_lewis_ferguson", name: "Lewis Ferguson", position: "MID", rating: 79 },
+    { id: "bologna_riccardo_orsolini", name: "Riccardo Orsolini", position: "FWD", rating: 81 },
+    { id: "bologna_santiago_castro", name: "Santiago Castro", position: "FWD", rating: 76 },
+  ],
+  torino: [
+    { id: "torino_vanja_milinkovi_savi", name: "Vanja Milinković-Savić", position: "GK", rating: 78 },
+    { id: "torino_sa_l_coco", name: "Saúl Coco", position: "DEF", rating: 75 },
+    { id: "torino_adam_masina", name: "Adam Masina", position: "DEF", rating: 74 },
+    { id: "torino_samuele_ricci", name: "Samuele Ricci", position: "MID", rating: 79 },
+    { id: "torino_ivan_ili", name: "Ivan Ilić", position: "MID", rating: 76 },
+    { id: "torino_duv_n_zapata", name: "Duván Zapata", position: "FWD", rating: 78 },
+    { id: "torino_antonio_sanabria", name: "Antonio Sanabria", position: "FWD", rating: 75 },
+  ],
+  bayern: [
+    { id: "bayern_manuel_neuer", name: "Manuel Neuer", position: "GK", rating: 86 },
+    { id: "bayern_dayot_upamecano", name: "Dayot Upamecano", position: "DEF", rating: 84 },
+    { id: "bayern_kim_min_jae", name: "Kim Min-jae", position: "DEF", rating: 83 },
+    { id: "bayern_joshua_kimmich", name: "Joshua Kimmich", position: "MID", rating: 87 },
+    { id: "bayern_jamal_musiala", name: "Jamal Musiala", position: "MID", rating: 88 },
+    { id: "bayern_harry_kane", name: "Harry Kane", position: "FWD", rating: 90 },
+    { id: "bayern_michael_olise", name: "Michael Olise", position: "FWD", rating: 85 },
+  ],
+  dortmund: [
+    { id: "dortmund_gregor_kobel", name: "Gregor Kobel", position: "GK", rating: 85 },
+    { id: "dortmund_nico_schlotterbeck", name: "Nico Schlotterbeck", position: "DEF", rating: 83 },
+    { id: "dortmund_julian_ryerson", name: "Julian Ryerson", position: "DEF", rating: 79 },
+    { id: "dortmund_emre_can", name: "Emre Can", position: "MID", rating: 80 },
+    { id: "dortmund_julian_brandt", name: "Julian Brandt", position: "MID", rating: 83 },
+    { id: "dortmund_serhou_guirassy", name: "Serhou Guirassy", position: "FWD", rating: 84 },
+    { id: "dortmund_karim_adeyemi", name: "Karim Adeyemi", position: "FWD", rating: 80 },
+  ],
+  leverkusen: [
+    { id: "leverkusen_luk_hr_deck", name: "Lukáš Hrádecký", position: "GK", rating: 82 },
+    { id: "leverkusen_jonathan_tah", name: "Jonathan Tah", position: "DEF", rating: 84 },
+    { id: "leverkusen_edmond_tapsoba", name: "Edmond Tapsoba", position: "DEF", rating: 83 },
+    { id: "leverkusen_granit_xhaka", name: "Granit Xhaka", position: "MID", rating: 85 },
+    { id: "leverkusen_florian_wirtz", name: "Florian Wirtz", position: "MID", rating: 88 },
+    { id: "leverkusen_patrik_schick", name: "Patrik Schick", position: "FWD", rating: 83 },
+    { id: "leverkusen_lex_grimaldo", name: "Álex Grimaldo", position: "FWD", rating: 84 },
+  ],
+  leipzig: [
+    { id: "leipzig_p_ter_gul_csi", name: "Péter Gulácsi", position: "GK", rating: 81 },
+    { id: "leipzig_willi_orb_n", name: "Willi Orbán", position: "DEF", rating: 82 },
+    { id: "leipzig_david_raum", name: "David Raum", position: "DEF", rating: 81 },
+    { id: "leipzig_amadou_haidara", name: "Amadou Haidara", position: "MID", rating: 78 },
+    { id: "leipzig_xavi_simons", name: "Xavi Simons", position: "MID", rating: 84 },
+    { id: "leipzig_lo_s_openda", name: "Loïs Openda", position: "FWD", rating: 83 },
+    { id: "leipzig_benjamin_e_ko", name: "Benjamin Šeško", position: "FWD", rating: 83 },
+  ],
+  stuttgart: [
+    { id: "stuttgart_alexander_n_bel", name: "Alexander Nübel", position: "GK", rating: 82 },
+    { id: "stuttgart_jeff_chabot", name: "Jeff Chabot", position: "DEF", rating: 78 },
+    { id: "stuttgart_maximilian_mittelst_dt", name: "Maximilian Mittelstädt", position: "DEF", rating: 80 },
+    { id: "stuttgart_angelo_stiller", name: "Angelo Stiller", position: "MID", rating: 81 },
+    { id: "stuttgart_deniz_undav", name: "Deniz Undav", position: "MID", rating: 83 },
+    { id: "stuttgart_ermedin_demirovi", name: "Ermedin Demirović", position: "FWD", rating: 79 },
+    { id: "stuttgart_chris_f_hrich", name: "Chris Führich", position: "FWD", rating: 80 },
+  ],
+  frankfurt: [
+    { id: "frankfurt_kevin_trapp", name: "Kevin Trapp", position: "GK", rating: 81 },
+    { id: "frankfurt_robin_koch", name: "Robin Koch", position: "DEF", rating: 80 },
+    { id: "frankfurt_arthur_theate", name: "Arthur Theate", position: "DEF", rating: 78 },
+    { id: "frankfurt_ellyes_skhiri", name: "Ellyes Skhiri", position: "MID", rating: 79 },
+    { id: "frankfurt_hugo_larsson", name: "Hugo Larsson", position: "MID", rating: 78 },
+    { id: "frankfurt_omar_marmoush", name: "Omar Marmoush", position: "FWD", rating: 84 },
+    { id: "frankfurt_hugo_ekitik", name: "Hugo Ekitiké", position: "FWD", rating: 80 },
+  ],
+  wolfsburg: [
+    { id: "wolfsburg_koen_casteels", name: "Koen Casteels", position: "GK", rating: 81 },
+    { id: "wolfsburg_maxence_lacroix", name: "Maxence Lacroix", position: "DEF", rating: 79 },
+    { id: "wolfsburg_joakim_m_hle", name: "Joakim Mæhle", position: "DEF", rating: 77 },
+    { id: "wolfsburg_maximilian_arnold", name: "Maximilian Arnold", position: "MID", rating: 80 },
+    { id: "wolfsburg_mattias_svanberg", name: "Mattias Svanberg", position: "MID", rating: 77 },
+    { id: "wolfsburg_jonas_wind", name: "Jonas Wind", position: "FWD", rating: 78 },
+    { id: "wolfsburg_lovro_majer", name: "Lovro Majer", position: "FWD", rating: 78 },
+  ],
+  freiburg: [
+    { id: "freiburg_noah_atubolu", name: "Noah Atubolu", position: "GK", rating: 76 },
+    { id: "freiburg_matthias_ginter", name: "Matthias Ginter", position: "DEF", rating: 79 },
+    { id: "freiburg_lukas_k_bler", name: "Lukas Kübler", position: "DEF", rating: 74 },
+    { id: "freiburg_nicolas_h_fler", name: "Nicolas Höfler", position: "MID", rating: 77 },
+    { id: "freiburg_maximilian_eggestein", name: "Maximilian Eggestein", position: "MID", rating: 76 },
+    { id: "freiburg_vincenzo_grifo", name: "Vincenzo Grifo", position: "FWD", rating: 80 },
+    { id: "freiburg_junior_adamu", name: "Junior Adamu", position: "FWD", rating: 73 },
+  ],
+  hoffenheim: [
+    { id: "hoffenheim_oliver_baumann", name: "Oliver Baumann", position: "GK", rating: 80 },
+    { id: "hoffenheim_kevin_akpoguma", name: "Kevin Akpoguma", position: "DEF", rating: 75 },
+    { id: "hoffenheim_ozan_kabak", name: "Ozan Kabak", position: "DEF", rating: 77 },
+    { id: "hoffenheim_andrej_kramari", name: "Andrej Kramarić", position: "MID", rating: 81 },
+    { id: "hoffenheim_tom_bischof", name: "Tom Bischof", position: "MID", rating: 76 },
+    { id: "hoffenheim_maximilian_beier", name: "Maximilian Beier", position: "FWD", rating: 79 },
+    { id: "hoffenheim_mergim_berisha", name: "Mergim Berisha", position: "FWD", rating: 75 },
+  ],
+  werder: [
+    { id: "werder_michael_zetterer", name: "Michael Zetterer", position: "GK", rating: 75 },
+    { id: "werder_marco_friedl", name: "Marco Friedl", position: "DEF", rating: 78 },
+    { id: "werder_niklas_stark", name: "Niklas Stark", position: "DEF", rating: 76 },
+    { id: "werder_jens_stage", name: "Jens Stage", position: "MID", rating: 75 },
+    { id: "werder_senne_lynen", name: "Senne Lynen", position: "MID", rating: 75 },
+    { id: "werder_marvin_ducksch", name: "Marvin Ducksch", position: "FWD", rating: 78 },
+    { id: "werder_mitchell_weiser", name: "Mitchell Weiser", position: "FWD", rating: 76 },
+  ],
+  psg: [
+    { id: "psg_gianluigi_donnarumma", name: "Gianluigi Donnarumma", position: "GK", rating: 87 },
+    { id: "psg_marquinhos", name: "Marquinhos", position: "DEF", rating: 86 },
+    { id: "psg_achraf_hakimi", name: "Achraf Hakimi", position: "DEF", rating: 86 },
+    { id: "psg_vitinha", name: "Vitinha", position: "MID", rating: 85 },
+    { id: "psg_jo_o_neves", name: "João Neves", position: "MID", rating: 83 },
+    { id: "psg_ousmane_demb_l", name: "Ousmane Dembélé", position: "FWD", rating: 85 },
+    { id: "psg_bradley_barcola", name: "Bradley Barcola", position: "FWD", rating: 83 },
+  ],
+  monaco: [
+    { id: "monaco_philipp_k_hn", name: "Philipp Köhn", position: "GK", rating: 78 },
+    { id: "monaco_wilfried_singo", name: "Wilfried Singo", position: "DEF", rating: 81 },
+    { id: "monaco_vanderson", name: "Vanderson", position: "DEF", rating: 79 },
+    { id: "monaco_denis_zakaria", name: "Denis Zakaria", position: "MID", rating: 81 },
+    { id: "monaco_aleksandr_golovin", name: "Aleksandr Golovin", position: "MID", rating: 82 },
+    { id: "monaco_breel_embolo", name: "Breel Embolo", position: "FWD", rating: 79 },
+    { id: "monaco_maghnes_akliouche", name: "Maghnes Akliouche", position: "FWD", rating: 79 },
+  ],
+  marseille: [
+    { id: "marseille_ger_nimo_rulli", name: "Gerónimo Rulli", position: "GK", rating: 80 },
+    { id: "marseille_leonardo_balerdi", name: "Leonardo Balerdi", position: "DEF", rating: 79 },
+    { id: "marseille_amir_murillo", name: "Amir Murillo", position: "DEF", rating: 76 },
+    { id: "marseille_valentin_rongier", name: "Valentin Rongier", position: "MID", rating: 78 },
+    { id: "marseille_pierre_emile_h_jbjerg", name: "Pierre-Emile Højbjerg", position: "MID", rating: 83 },
+    { id: "marseille_mason_greenwood", name: "Mason Greenwood", position: "FWD", rating: 82 },
+    { id: "marseille_pierre_emerick_aubameyang", name: "Pierre-Emerick Aubameyang", position: "FWD", rating: 80 },
+  ],
+  lyon: [
+    { id: "lyon_lucas_perri", name: "Lucas Perri", position: "GK", rating: 78 },
+    { id: "lyon_moussa_niakhat", name: "Moussa Niakhaté", position: "DEF", rating: 78 },
+    { id: "lyon_nicol_s_tagliafico", name: "Nicolás Tagliafico", position: "DEF", rating: 79 },
+    { id: "lyon_nemanja_mati", name: "Nemanja Matić", position: "MID", rating: 79 },
+    { id: "lyon_corentin_tolisso", name: "Corentin Tolisso", position: "MID", rating: 79 },
+    { id: "lyon_alexandre_lacazette", name: "Alexandre Lacazette", position: "FWD", rating: 81 },
+    { id: "lyon_rayan_cherki", name: "Rayan Cherki", position: "FWD", rating: 81 },
+  ],
+  lille: [
+    { id: "lille_lucas_chevalier", name: "Lucas Chevalier", position: "GK", rating: 81 },
+    { id: "lille_bafod_diakit", name: "Bafodé Diakité", position: "DEF", rating: 79 },
+    { id: "lille_thomas_meunier", name: "Thomas Meunier", position: "DEF", rating: 76 },
+    { id: "lille_benjamin_andr", name: "Benjamin André", position: "MID", rating: 79 },
+    { id: "lille_nabil_bentaleb", name: "Nabil Bentaleb", position: "MID", rating: 77 },
+    { id: "lille_jonathan_david", name: "Jonathan David", position: "FWD", rating: 83 },
+    { id: "lille_edon_zhegrova", name: "Edon Zhegrova", position: "FWD", rating: 79 },
+  ],
+  nice: [
+    { id: "nice_marcin_bu_ka", name: "Marcin Bułka", position: "GK", rating: 80 },
+    { id: "nice_dante", name: "Dante", position: "DEF", rating: 77 },
+    { id: "nice_melvin_bard", name: "Melvin Bard", position: "DEF", rating: 76 },
+    { id: "nice_morgan_sanson", name: "Morgan Sanson", position: "MID", rating: 77 },
+    { id: "nice_hicham_boudaoui", name: "Hicham Boudaoui", position: "MID", rating: 76 },
+    { id: "nice_evann_guessand", name: "Evann Guessand", position: "FWD", rating: 77 },
+    { id: "nice_ga_tan_laborde", name: "Gaëtan Laborde", position: "FWD", rating: 77 },
+  ],
+  lens: [
+    { id: "lens_robin_risser", name: "Robin Risser", position: "GK", rating: 73 },
+    { id: "lens_kevin_danso", name: "Kevin Danso", position: "DEF", rating: 79 },
+    { id: "lens_jonathan_gradit", name: "Jonathan Gradit", position: "DEF", rating: 77 },
+    { id: "lens_salis_abdul_samed", name: "Salis Abdul Samed", position: "MID", rating: 77 },
+    { id: "lens_adrien_thomasson", name: "Adrien Thomasson", position: "MID", rating: 77 },
+    { id: "lens_florian_sotoca", name: "Florian Sotoca", position: "FWD", rating: 78 },
+    { id: "lens_elye_wahi", name: "Elye Wahi", position: "FWD", rating: 77 },
+  ],
+  rennes: [
+    { id: "rennes_brice_samba", name: "Brice Samba", position: "GK", rating: 81 },
+    { id: "rennes_lilian_brassier", name: "Lilian Brassier", position: "DEF", rating: 76 },
+    { id: "rennes_alidu_seidu", name: "Alidu Seidu", position: "DEF", rating: 74 },
+    { id: "rennes_baptiste_santamar_a", name: "Baptiste Santamaría", position: "MID", rating: 77 },
+    { id: "rennes_ludovic_blas", name: "Ludovic Blas", position: "MID", rating: 79 },
+    { id: "rennes_arnaud_kalimuendo", name: "Arnaud Kalimuendo", position: "FWD", rating: 78 },
+    { id: "rennes_amine_gouiri", name: "Amine Gouiri", position: "FWD", rating: 79 },
+  ],
+  strasbourg: [
+    { id: "strasbourg_or_e_petrovi", name: "Đorđe Petrović", position: "GK", rating: 77 },
+    { id: "strasbourg_sa_dou_sow", name: "Saïdou Sow", position: "DEF", rating: 74 },
+    { id: "strasbourg_isma_l_doukour", name: "Ismaël Doukouré", position: "DEF", rating: 74 },
+    { id: "strasbourg_dilane_bakwa", name: "Dilane Bakwa", position: "MID", rating: 76 },
+    { id: "strasbourg_habib_diarra", name: "Habib Diarra", position: "MID", rating: 77 },
+    { id: "strasbourg_emanuel_emegha", name: "Emanuel Emegha", position: "FWD", rating: 76 },
+    { id: "strasbourg_s_bastien_lemar_chal", name: "Sébastien Lemaréchal", position: "FWD", rating: 73 },
+  ],
+  nantes: [
+    { id: "nantes_alban_lafont", name: "Alban Lafont", position: "GK", rating: 78 },
+    { id: "nantes_nicolas_cozza", name: "Nicolas Cozza", position: "DEF", rating: 73 },
+    { id: "nantes_jean_charles_castelletto", name: "Jean-Charles Castelletto", position: "DEF", rating: 75 },
+    { id: "nantes_pedro_chirivella", name: "Pedro Chirivella", position: "MID", rating: 75 },
+    { id: "nantes_moses_simon", name: "Moses Simon", position: "MID", rating: 77 },
+    { id: "nantes_mostafa_mohamed", name: "Mostafa Mohamed", position: "FWD", rating: 75 },
+    { id: "nantes_matthis_abline", name: "Matthis Abline", position: "FWD", rating: 74 },
+  ],
+  river_plate: [
+    { id: "river_plate_franco_armani", name: "Franco Armani", position: "GK", rating: 81 },
+    { id: "river_plate_germ_n_pezzella", name: "Germán Pezzella", position: "DEF", rating: 79 },
+    { id: "river_plate_marcos_acu_a", name: "Marcos Acuña", position: "DEF", rating: 80 },
+    { id: "river_plate_rodrigo_aliendro", name: "Rodrigo Aliendro", position: "MID", rating: 76 },
+    { id: "river_plate_nacho_fern_ndez", name: "Nacho Fernández", position: "MID", rating: 79 },
+    { id: "river_plate_facundo_colidio", name: "Facundo Colidio", position: "FWD", rating: 78 },
+    { id: "river_plate_miguel_borja", name: "Miguel Borja", position: "FWD", rating: 79 },
+  ],
+  boca_juniors: [
+    { id: "boca_juniors_sergio_romero", name: "Sergio Romero", position: "GK", rating: 78 },
+    { id: "boca_juniors_marcos_rojo", name: "Marcos Rojo", position: "DEF", rating: 77 },
+    { id: "boca_juniors_luis_adv_ncula", name: "Luis Advíncula", position: "DEF", rating: 77 },
+    { id: "boca_juniors_guillermo_fern_ndez", name: "Guillermo Fernández", position: "MID", rating: 76 },
+    { id: "boca_juniors_exequiel_zeballos", name: "Exequiel Zeballos", position: "MID", rating: 76 },
+    { id: "boca_juniors_edinson_cavani", name: "Edinson Cavani", position: "FWD", rating: 80 },
+    { id: "boca_juniors_miguel_merentiel", name: "Miguel Merentiel", position: "FWD", rating: 78 },
+  ],
+  penarol: [
+    { id: "penarol_washington_aguerre", name: "Washington Aguerre", position: "GK", rating: 74 },
+    { id: "penarol_javier_m_ndez", name: "Javier Méndez", position: "DEF", rating: 72 },
+    { id: "penarol_guzm_n_rodr_guez", name: "Guzmán Rodríguez", position: "DEF", rating: 73 },
+    { id: "penarol_dami_n_su_rez", name: "Damián Suárez", position: "MID", rating: 73 },
+    { id: "penarol_eduardo_darias", name: "Eduardo Darias", position: "MID", rating: 72 },
+    { id: "penarol_mat_as_arezo", name: "Matías Arezo", position: "FWD", rating: 75 },
+    { id: "penarol_maximiliano_silvera", name: "Maximiliano Silvera", position: "FWD", rating: 73 },
+  ],
+  nacional_uru: [
+    { id: "nacional_uru_sergio_rochet", name: "Sergio Rochet", position: "GK", rating: 76 },
+    { id: "nacional_uru_sebasti_n_coates", name: "Sebastián Coates", position: "DEF", rating: 77 },
+    { id: "nacional_uru_emiliano_ancheta", name: "Emiliano Ancheta", position: "DEF", rating: 71 },
+    { id: "nacional_uru_nicol_s_lodeiro", name: "Nicolás Lodeiro", position: "MID", rating: 77 },
+    { id: "nacional_uru_christian_oliva", name: "Christian Oliva", position: "MID", rating: 73 },
+    { id: "nacional_uru_gonzalo_carneiro", name: "Gonzalo Carneiro", position: "FWD", rating: 73 },
+    { id: "nacional_uru_maximiliano_g_mez", name: "Maximiliano Gómez", position: "FWD", rating: 76 },
+  ],
+  colo_colo: [
+    { id: "colo_colo_brayan_cort_s", name: "Brayan Cortés", position: "GK", rating: 74 },
+    { id: "colo_colo_alan_saldivia", name: "Alan Saldivia", position: "DEF", rating: 72 },
+    { id: "colo_colo_erick_wiemberg", name: "Erick Wiemberg", position: "DEF", rating: 71 },
+    { id: "colo_colo_esteban_pavez", name: "Esteban Pavez", position: "MID", rating: 73 },
+    { id: "colo_colo_arturo_vidal", name: "Arturo Vidal", position: "MID", rating: 79 },
+    { id: "colo_colo_carlos_palacios", name: "Carlos Palacios", position: "FWD", rating: 75 },
+    { id: "colo_colo_javier_correa", name: "Javier Correa", position: "FWD", rating: 73 },
+  ],
+  olimpia: [
+    { id: "olimpia_gaspar_servio", name: "Gaspar Servio", position: "GK", rating: 72 },
+    { id: "olimpia_junior_barreto", name: "Junior Barreto", position: "DEF", rating: 70 },
+    { id: "olimpia_iv_n_torres", name: "Iván Torres", position: "DEF", rating: 71 },
+    { id: "olimpia_richard_ortiz", name: "Richard Ortiz", position: "MID", rating: 72 },
+    { id: "olimpia_hugo_fern_ndez", name: "Hugo Fernández", position: "MID", rating: 70 },
+    { id: "olimpia_derlis_gonz_lez", name: "Derlis González", position: "FWD", rating: 75 },
+    { id: "olimpia_guillermo_paiva", name: "Guillermo Paiva", position: "FWD", rating: 73 },
+  ],
+};
+
+// Aparência do NPC: determinística, nunca sorteada. Ancorada no `id`, que já é
+// estável para persistência — o mesmo jogador sai igual em toda partida e em
+// todo save. Um elenco novo já nasce com aparência sem precisar de curadoria.
+// Para fixar um jogador específico, basta dar `skin`/`hair` no objeto dele:
+// o valor explícito ganha do derivado.
+function getPlayerAppearance(player) {
+  const id = (player && (player.id || player.name)) || "anon";
+  let hash = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    hash ^= id.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return {
+    skin: player?.skin ?? SKIN_COLORS[hash % SKIN_COLORS.length],
+    hair: player?.hair ?? HAIR_COLORS[(hash >>> 8) % HAIR_COLORS.length],
+  };
+}
+
+function normalizeRosterTeamName(teamName) {
+  return (teamName || "").replace(/\s+/g, "_");
+}
+
+function getTeamRoster(teamName) {
+  const key = normalizeRosterTeamName(teamName);
+  return REAL_ROSTERS[key] || REAL_ROSTERS[teamName] || [];
+}
+
+function getLinePlayers(teamName) {
+  return getTeamRoster(teamName).filter(p => p.position !== "GK");
+}
+
+function getGoalkeeper(teamName) {
+  return getTeamRoster(teamName).find(p => p.position === "GK") || null;
+}
+
+function makePlayerStatId(teamName, player) {
+  return player && player.id ? player.id : `${normalizeRosterTeamName(teamName).toLowerCase()}_${String(player?.name || "jogador").toLowerCase().replace(/[^a-z0-9]+/g, "_")}`;
+}
+
+function createPlayerCareerStat(teamName, player, isUser = false) {
+  return {
+    id: isUser ? "user_player" : makePlayerStatId(teamName, player),
+    name: isUser ? (window.careerMode?.playerName || player?.name || "Jogador") : (player?.name || "Jogador"),
+    team: teamName,
+    position: player?.position || "FWD",
+    goals: 0,
+    assists: 0,
+    matches: 0,
+    isPlayer: !!isUser,
+  };
+}
+
+function pickWeightedScorer(teamName) {
+  const line = getLinePlayers(teamName);
+  if (!line.length) return null;
+  const weights = { FWD: 5, MID: 3, DEF: 1 };
+  const total = line.reduce((sum, p) => sum + (weights[p.position] || 2), 0);
+  let roll = Math.random() * total;
+  for (const p of line) {
+    roll -= (weights[p.position] || 2);
+    if (roll <= 0) return p;
+  }
+  return line[line.length - 1];
+}
+
+function pickAssistProvider(teamName, scorerId = null) {
+  const line = getLinePlayers(teamName).filter(p => p.id !== scorerId);
+  if (!line.length) return null;
+  const weights = { FWD: 2, MID: 5, DEF: 2 };
+  const total = line.reduce((sum, p) => sum + (weights[p.position] || 2), 0);
+  let roll = Math.random() * total;
+  for (const p of line) {
+    roll -= (weights[p.position] || 2);
+    if (roll <= 0) return p;
+  }
+  return line[line.length - 1];
+}
+
+if (typeof window !== "undefined") {
+  window.REAL_ROSTERS = REAL_ROSTERS;
+  window.getTeamRoster = getTeamRoster;
+  window.getLinePlayers = getLinePlayers;
+  window.getGoalkeeper = getGoalkeeper;
+  window.createPlayerCareerStat = createPlayerCareerStat;
+  window.makePlayerStatId = makePlayerStatId;
+  window.pickWeightedScorer = pickWeightedScorer;
+  window.pickAssistProvider = pickAssistProvider;
+}

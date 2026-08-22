@@ -1,0 +1,64 @@
+# ── Dependências ────────────────────────────────────────────────────────────
+# O servidor não tem dependência nenhuma hoje (`server/package.json` vem com
+# "dependencies": {}), mas o Render roda `npm install` e cria a pasta na
+# máquina dele. Se um dia entrar um pacote aqui, ele já está ignorado.
+node_modules/
+jspm_packages/
+
+# ── Logs ────────────────────────────────────────────────────────────────────
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.log
+
+# Lockfile de dependência de terceiro não entra enquanto não houver dependência:
+# hoje ele seria um arquivo vazio de conteúdo e cheio de ruído em diff.
+# APAGUE esta linha assim que instalar o primeiro pacote — sem lock, o Render
+# pode subir uma versão diferente da sua e o bug só aparece em produção.
+package-lock.json
+
+# ── Sistema operacional ─────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+# O projeto vive numa pasta do OneDrive, que espalha estes arquivos sozinho.
+desktop.ini
+*.lnk
+
+# ── Editor / ferramentas ────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Config do Claude Code: `launch.json` é do projeto e VAI para o repositório
+# (é ele que sabe como subir o servidor de desenvolvimento). O `settings.local`
+# é por máquina, como o nome diz.
+.claude/settings.local.json
+
+# ── Python (scripts avulsos de análise da arte) ─────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+
+# ── Ambiente ────────────────────────────────────────────────────────────────
+# Nada aqui usa .env hoje. Está listado porque é o arquivo que mais vaza chave
+# em repositório público, e o custo de prevenir é uma linha.
+.env
+.env.*
+!.env.example
+
+# ── Temporários ─────────────────────────────────────────────────────────────
+tmp/
+temp/
+*.tmp
+*.bak

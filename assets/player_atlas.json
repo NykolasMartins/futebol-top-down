@@ -1,0 +1,860 @@
+{
+  "textures": [
+    {
+      "image": "player_atlas.png",
+      "format": "RGBA8888",
+      "size": {
+        "w": 240,
+        "h": 384
+      },
+      "scale": 1,
+      "frames": [
+        {
+          "filename": "idle_north",
+          "frame": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north_0",
+          "frame": {
+            "x": 48,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north_1",
+          "frame": {
+            "x": 96,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north_2",
+          "frame": {
+            "x": 144,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north_3",
+          "frame": {
+            "x": 192,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "idle_north-east",
+          "frame": {
+            "x": 0,
+            "y": 48,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-east_0",
+          "frame": {
+            "x": 48,
+            "y": 48,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-east_1",
+          "frame": {
+            "x": 96,
+            "y": 48,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-east_2",
+          "frame": {
+            "x": 144,
+            "y": 48,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-east_3",
+          "frame": {
+            "x": 192,
+            "y": 48,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "idle_east",
+          "frame": {
+            "x": 0,
+            "y": 96,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_east_0",
+          "frame": {
+            "x": 48,
+            "y": 96,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_east_1",
+          "frame": {
+            "x": 96,
+            "y": 96,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_east_2",
+          "frame": {
+            "x": 144,
+            "y": 96,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_east_3",
+          "frame": {
+            "x": 192,
+            "y": 96,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "idle_south-east",
+          "frame": {
+            "x": 0,
+            "y": 144,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-east_0",
+          "frame": {
+            "x": 48,
+            "y": 144,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-east_1",
+          "frame": {
+            "x": 96,
+            "y": 144,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-east_2",
+          "frame": {
+            "x": 144,
+            "y": 144,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-east_3",
+          "frame": {
+            "x": 192,
+            "y": 144,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "idle_south",
+          "frame": {
+            "x": 0,
+            "y": 192,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south_0",
+          "frame": {
+            "x": 48,
+            "y": 192,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south_1",
+          "frame": {
+            "x": 96,
+            "y": 192,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south_2",
+          "frame": {
+            "x": 144,
+            "y": 192,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south_3",
+          "frame": {
+            "x": 192,
+            "y": 192,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "idle_south-west",
+          "frame": {
+            "x": 0,
+            "y": 240,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-west_0",
+          "frame": {
+            "x": 48,
+            "y": 240,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-west_1",
+          "frame": {
+            "x": 96,
+            "y": 240,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-west_2",
+          "frame": {
+            "x": 144,
+            "y": 240,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_south-west_3",
+          "frame": {
+            "x": 192,
+            "y": 240,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "idle_west",
+          "frame": {
+            "x": 0,
+            "y": 288,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_west_0",
+          "frame": {
+            "x": 48,
+            "y": 288,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_west_1",
+          "frame": {
+            "x": 96,
+            "y": 288,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_west_2",
+          "frame": {
+            "x": 144,
+            "y": 288,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_west_3",
+          "frame": {
+            "x": 192,
+            "y": 288,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "idle_north-west",
+          "frame": {
+            "x": 0,
+            "y": 336,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-west_0",
+          "frame": {
+            "x": 48,
+            "y": 336,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-west_1",
+          "frame": {
+            "x": 96,
+            "y": 336,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-west_2",
+          "frame": {
+            "x": 144,
+            "y": 336,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        },
+        {
+          "filename": "run_north-west_3",
+          "frame": {
+            "x": 192,
+            "y": 336,
+            "w": 48,
+            "h": 48
+          },
+          "rotated": false,
+          "trimmed": false,
+          "spriteSourceSize": {
+            "x": 0,
+            "y": 0,
+            "w": 48,
+            "h": 48
+          },
+          "sourceSize": {
+            "w": 48,
+            "h": 48
+          }
+        }
+      ]
+    }
+  ],
+  "meta": {
+    "app": "manual",
+    "version": "1.0",
+    "scale": "1"
+  }
+}

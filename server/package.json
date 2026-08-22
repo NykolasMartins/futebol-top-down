@@ -1,0 +1,15 @@
+{
+  "name": "futebol-topdown-sala",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Servidor de salas do Futebol Top-Down: pareia jogadores e repassa pacotes de partida. Não simula nada — a autoridade é o anfitrião da sala.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test_lobby.js && node test_salas.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {}
+}
