@@ -172,6 +172,34 @@ function tratar(id, msg) {
     return;
   }
 
+  // Sala PRIVADA: o anfitrião cria e recebe o código para divulgar. Daqui em
+  // diante ela é igual à sala de LAN — lobby, escalação e o capitão iniciando.
+  if (msg.t === "criar") {
+    const codigo = S.criar(registro, id, msg.nome);
+    enviarPara(id, { t: "sala_encontrada", codigo, criada: true });
+    transmitir(codigo);
+    return;
+  }
+
+  // Entrada por CÓDIGO. Sala inexistente devolve erro em vez de criar uma sala
+  // vazia: quem digitou errado ficaria esperando para sempre num lugar onde
+  // nunca vai chegar ninguém, achando que o amigo é que sumiu.
+  if (msg.t === "entrar_codigo") {
+    const codigo = S.normalizarCodigo(msg.sala);
+    if (!codigo || !S.existe(registro, codigo)) {
+      enviarPara(id, { t: "sala_nao_encontrada", codigo });
+      return;
+    }
+    if (registro.salas[codigo].iniciada) {
+      enviarPara(id, { t: "sala_nao_encontrada", codigo, motivo: "iniciada" });
+      return;
+    }
+    S.entrar(registro, codigo, id, msg.nome);
+    enviarPara(id, { t: "sala_encontrada", codigo });
+    transmitir(codigo);
+    return;
+  }
+
   const codigo = S.codigoDe(registro, id) || S.PADRAO;
   const sala = S.salaDe(registro, id) || salaPadrao;
 

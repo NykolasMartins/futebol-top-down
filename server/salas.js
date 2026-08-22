@@ -21,6 +21,10 @@ const L = require("./lobby");
 const PADRAO = "lan"; // sala do modo LAN: comportamento de sempre
 const MAX_HUMANOS = 2; // pareamento online: 1 de cada lado
 const CODIGO_TAM = 4;
+// Só dígitos: o código é ditado por voz ou digitado no celular, e com letras
+// sempre sobra a dúvida entre O/0 e I/1. 10.000 combinações bastam — a sala
+// morre quando esvazia, então nunca há muitas vivas ao mesmo tempo.
+const CODIGO_ALFABETO = "0123456789";
 
 function novoRegistro() {
   return {
@@ -29,9 +33,18 @@ function novoRegistro() {
   };
 }
 
-/** Código curto e legível para o jogador ditar no telefone. Sem 0/O e 1/I. */
+/** Como o jogador digitou -> como a sala é guardada. */
+function normalizarCodigo(txt) {
+  return String(txt || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, CODIGO_TAM);
+}
+
+/** Código curto para o jogador ditar. Ver CODIGO_ALFABETO. */
 function gerarCodigo(registro, sorteio) {
-  const alfabeto = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const alfabeto = CODIGO_ALFABETO;
   const rnd = sorteio || (() => Math.floor(Math.random() * alfabeto.length));
   for (let tentativa = 0; tentativa < 50; tentativa++) {
     let c = "";
@@ -86,13 +99,35 @@ function procurar(registro, id, nome, sorteio) {
   const comVaga = Object.keys(registro.salas).find(
     (c) =>
       c !== PADRAO &&
+      // SÓ sala de pareamento. Sala com código é de quem convidou alguém —
+      // cair nela de fila roubaria a vaga do amigo que está a caminho.
+      registro.salas[c].pareamento &&
       !registro.salas[c].iniciada &&
       humanos(registro.salas[c]) > 0 &&
       humanos(registro.salas[c]) < MAX_HUMANOS,
   );
   const codigo = comVaga || gerarCodigo(registro, sorteio);
-  entrar(registro, codigo, id, nome);
+  const sala = entrar(registro, codigo, id, nome);
+  sala.pareamento = true;
   return codigo;
+}
+
+/**
+ * Sala PRIVADA: o anfitrião cria, recebe o código e o divulga. Funciona como a
+ * sala de LAN — lobby com lado, posição e o capitão clicando INICIAR —, e é por
+ * isso que ela NÃO é de pareamento: começar sozinha ao chegar o segundo tiraria
+ * o lobby da mão de quem convidou.
+ */
+function criar(registro, id, nome, sorteio) {
+  const codigo = gerarCodigo(registro, sorteio);
+  const sala = entrar(registro, codigo, id, nome);
+  sala.pareamento = false;
+  return codigo;
+}
+
+/** A sala existe e ainda dá para entrar? Usado antes de aceitar um código. */
+function existe(registro, codigo) {
+  return !!registro.salas[codigo];
 }
 
 function sair(registro, id) {
@@ -118,12 +153,14 @@ function sair(registro, id) {
  * anunciar uma vez só.
  */
 function iniciarSeCheia(registro, codigo) {
-  // NUNCA a sala LAN: lá quem começa a partida é o capitão, clicando INICIAR
-  // depois de todo mundo escolher lado e posição. Iniciar sozinho ali seria
-  // arrancar o lobby da mão dos jogadores assim que o segundo entrasse.
+  // NUNCA a sala LAN nem a sala com código: nas duas quem começa a partida é o
+  // capitão, clicando INICIAR depois de todo mundo escolher lado e posição.
+  // Iniciar sozinho ali seria arrancar o lobby da mão dos jogadores assim que
+  // o segundo entrasse. Só a fila de pareamento começa sozinha, porque nela
+  // não existe lobby nenhum para usar.
   if (codigo === PADRAO) return false;
   const sala = registro.salas[codigo];
-  if (!sala || sala.iniciada) return false;
+  if (!sala || !sala.pareamento || sala.iniciada) return false;
   const ids = Object.keys(sala.jogadores);
   if (ids.length < MAX_HUMANOS) return false;
 
@@ -139,8 +176,12 @@ function iniciarSeCheia(registro, codigo) {
 module.exports = {
   PADRAO,
   MAX_HUMANOS,
+  CODIGO_TAM,
   novoRegistro,
   gerarCodigo,
+  normalizarCodigo,
+  criar,
+  existe,
   obter,
   salaDe,
   codigoDe,

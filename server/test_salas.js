@@ -93,16 +93,51 @@ const ok = (cond, msg) => {
   );
 }
 
+// ── Sala PRIVADA por código ────────────────────────────────────────────────
+{
+  const r = S.novoRegistro();
+  const codigo = S.criar(r, "host", "Ana");
+  ok(S.existe(r, codigo), "a sala existe assim que o anfitrião cria");
+  ok(r.salas[codigo].pareamento === false, "sala com código NÃO é de pareamento");
+
+  // A regra que importa: ela NÃO começa sozinha ao chegar o segundo. Quem
+  // convidou tem de poder escolher lado e clicar INICIAR, como na LAN.
+  S.entrar(r, codigo, "amigo", "Bia");
+  ok(S.humanos(r.salas[codigo]) === 2, "o convidado entrou pelo código");
+  ok(
+    S.iniciarSeCheia(r, codigo) === false,
+    "sala com código espera o capitão — não começa sozinha",
+  );
+
+  // E a fila de pareamento não pode roubar a vaga do amigo que está a caminho.
+  const r2 = S.novoRegistro();
+  const privada = S.criar(r2, "host", "Ana");
+  const daFila = S.procurar(r2, "estranho", "Caio");
+  ok(daFila !== privada, "quem procura partida rápida NÃO cai em sala privada");
+}
+
+// ── Código digitado pelo jogador ───────────────────────────────────────────
+{
+  ok(S.normalizarCodigo(" 12 34 ") === "1234", "espaço no meio não atrapalha");
+  ok(S.normalizarCodigo("1234567") === "1234", "corta no tamanho do código");
+  ok(S.normalizarCodigo("ab-cd") === "ABCD", "caixa e traço normalizados");
+  ok(S.normalizarCodigo(null) === "", "entrada vazia não vira sala fantasma");
+
+  // Código inexistente NÃO cria sala: quem digitou errado precisa saber.
+  const r = S.novoRegistro();
+  ok(S.existe(r, "9999") === false, "sala que ninguém criou não existe");
+}
+
 // ── Código de sala: legível e sem colisão ──────────────────────────────────
 {
   const r = S.novoRegistro();
   const c = S.gerarCodigo(r);
-  ok(/^[A-HJ-NP-Z2-9]{4}$/.test(c), "código sem 0/O e 1/I, que o jogador confunde ao ditar");
+  ok(/^[0-9]{4}$/.test(c), "quatro dígitos: sem letra para confundir ao ditar");
 
-  // Sorteio viciado: sempre a mesma letra. O gerador tem de escapar da colisão.
-  r.salas["AAAA"] = L.novaSala();
+  // Sorteio viciado: sempre o mesmo dígito. O gerador tem de escapar da colisão.
+  r.salas["0000"] = L.novaSala();
   const c2 = S.gerarCodigo(r, () => 0);
-  ok(c2 !== "AAAA", "código já usado não é devolvido de novo");
+  ok(c2 !== "0000", "código já usado não é devolvido de novo");
 }
 
 console.log("test_salas: OK (" + n + " asserts)");
