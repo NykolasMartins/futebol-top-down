@@ -194,7 +194,7 @@ LobbyClient.PORTA = 8080;
  * próprio `server/server.js` (LAN ou VPS única), e é por isso que o modo LAN
  * não depende de nada disto.
  */
-LobbyClient.ONLINE_HOST = "";
+LobbyClient.ONLINE_HOST = "https://futebol-top-down.onrender.com/";
 
 // Check: o esquema do socket. É a falha MUDA do deploy — navegador recusa
 // `ws://` em página https e o socket nem tenta abrir, sem erro para mostrar.
