@@ -564,6 +564,10 @@ Object.assign(GameScene.prototype, {
       (s.showMinimap ? "on" : "") +
       '" id="toggle-minimap"></div>' +
       "</div>" +
+      // Efeitos: o catálogo se desenha sozinho (ver EfeitosVisuais.CATALOGO),
+      // então efeito novo aparece aqui e no menu sem tocar nas duas telas.
+      '<div class="pui-config-sep">EFEITOS VISUAIS</div>' +
+      EfeitosVisuais.linhasHtml() +
       '<div class="pui-config-row">' +
       "<div>" +
       '<div class="pui-config-label">CONTROLES</div>' +
@@ -592,6 +596,9 @@ Object.assign(GameScene.prototype, {
         this._openPauseMenuAfterSub();
         return;
       }
+
+      // Interruptor de efeito: o próprio módulo trata e persiste.
+      if (EfeitosVisuais.tratarClique(e.target)) return;
 
       if (e.target.id === "toggle-sound") {
         s.soundEnabled = !s.soundEnabled;

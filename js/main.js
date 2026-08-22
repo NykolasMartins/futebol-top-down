@@ -97,12 +97,18 @@ game.events.once(Phaser.Core.Events.READY, () => {
       CURVAR_MENUS && !CENAS_DE_JOGO.has(key),
     );
 
+  // `EfeitosVisuais.aplicarNaCena` no lugar do `aplicarCrt` direto: ele liga o
+  // filtro OU o remove, conforme a escolha do jogador (Configurações). Chamar
+  // `aplicarCrt` aqui reacenderia o CRT de quem o desligou a cada troca de cena.
   game.scene.scenes.forEach((cena) => {
     cena.events.on(Phaser.Scenes.Events.CREATE, () => {
       modoMenu(cena.scene.key);
-      aplicarCrt(cena);
+      EfeitosVisuais.aplicarNaCena(cena);
     });
     modoMenu(cena.scene.key);
-    aplicarCrt(cena);
+    EfeitosVisuais.aplicarNaCena(cena);
   });
+
+  // Camadas DOM e curvatura: uma vez, no boot.
+  EfeitosVisuais.aplicar(game);
 });
