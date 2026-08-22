@@ -43,6 +43,30 @@ const LAN_SUAVIZA = 0.28;
  */
 const LAN_SALTO_PX = 260;
 
+/**
+ * Dead reckoning: por quanto tempo o alvo da rede é PROJETADO com a última
+ * velocidade conhecida antes de congelar.
+ *
+ * O alvo perseguido é sempre passado: 50ms do intervalo de envio MAIS a
+ * viagem até o outro cliente. Em LAN isso é quase nada; num servidor na
+ * nuvem, com 100ms de ida, uma bola a 700px/s aparece ~105px atrás de onde
+ * está de verdade — é o "engasgo" que o convidado sente.
+ *
+ * Projetar a velocidade que JÁ viaja no pacote recupera essa distância sem
+ * ligar simulação nenhuma no convidado: não há atrito, colisão nem regra
+ * aqui, só `posição + velocidade × tempo`. É o mesmo que a IA faz para
+ * interceptar a bola.
+ *
+ * O TETO é o que impede isto de virar invenção: com pacote perdido, a
+ * projeção seguiria em linha reta para sempre. Passado o teto o alvo congela
+ * no último ponto conhecido e volta a valer o comportamento antigo —
+ * atrasado, mas nunca fantasioso.
+ */
+const LAN_EXTRAPOLA_MAX_MS = 150;
+
+/** Abaixo disto a entidade está parada: projetar só somaria tremor. */
+const LAN_EXTRAPOLA_MIN_VEL = 30; // px/s
+
 Object.assign(GameScene.prototype, {
   /** Liga o rádio. Sem `lan.cliente` (carreira, exibição) não faz nada. */
   startLanSync() {
@@ -211,7 +235,15 @@ Object.assign(GameScene.prototype, {
       e.setPosition(dado.x, dado.y);
       if (e.body && e.body.reset) e.body.reset(dado.x, dado.y);
     }
-    e.lanAlvo = { x: dado.x, y: dado.y };
+    // O alvo guarda a velocidade e QUANDO chegou: é o que permite projetar o
+    // ponto no `lanInterpolar`, em vez de perseguir uma posição já velha.
+    e.lanAlvo = {
+      x: dado.x,
+      y: dado.y,
+      vx: dado.vx || 0,
+      vy: dado.vy || 0,
+      t: this.time.now,
+    };
 
     if (e.body && e.body.setVelocity) e.body.setVelocity(dado.vx || 0, dado.vy || 0);
     if (typeof dado.a === "number" && e.setRotation) e.setRotation(dado.a);
@@ -230,8 +262,9 @@ Object.assign(GameScene.prototype, {
 
     const desliza = (e) => {
       if (!e || !e.lanAlvo || !e.active) return;
-      e.x = Phaser.Math.Linear(e.x, e.lanAlvo.x, passo);
-      e.y = Phaser.Math.Linear(e.y, e.lanAlvo.y, passo);
+      const alvo = GameScene.lanPontoPrevisto(e.lanAlvo, this.time.now);
+      e.x = Phaser.Math.Linear(e.x, alvo.x, passo);
+      e.y = Phaser.Math.Linear(e.y, alvo.y, passo);
     };
 
     // Bonecos de outros humanos: valem nos dois lados da conexão.
@@ -459,6 +492,65 @@ GameScene.prototype.kickBallFrom = function (entity, targetX, targetY, forca, op
   if (convidado) return;
   return _kickBallFromOriginal.call(this, entity, targetX, targetY, forca, options);
 };
+
+/**
+ * Onde a entidade DEVE estar agora, projetando a última velocidade recebida.
+ *
+ * Pura de propósito: sem `this`, sem cena, sem Phaser — é a única parte da
+ * sincronização que dá para testar sem abrir socket nem subir partida, e é
+ * justamente a que erra em silêncio (bola adiantada demais quando um pacote
+ * se perde, ou projeção que nunca acontece e o convidado segue engasgando).
+ */
+GameScene.lanPontoPrevisto = function (alvo, agora) {
+  if (!alvo) return { x: 0, y: 0 };
+  const vx = alvo.vx || 0;
+  const vy = alvo.vy || 0;
+  if (Math.abs(vx) + Math.abs(vy) < LAN_EXTRAPOLA_MIN_VEL) {
+    return { x: alvo.x, y: alvo.y };
+  }
+  // Teto duplo: nunca projeta para trás (relógio zerado num restart de cena)
+  // nem além da janela em que a velocidade recebida ainda vale.
+  const dt =
+    Math.min(Math.max((agora || 0) - (alvo.t || 0), 0), LAN_EXTRAPOLA_MAX_MS) /
+    1000;
+  return { x: alvo.x + vx * dt, y: alvo.y + vy * dt };
+};
+
+// Check: a projeção do alvo da rede. Errar aqui não emite nada no console — o
+// sintoma é bola adiantada, ou o engasgo que a projeção deveria ter tirado.
+console.assert(
+  (() => {
+    const P = GameScene.lanPontoPrevisto;
+    const alvo = (vx, vy) => ({ x: 100, y: 100, vx, vy, t: 1000 });
+
+    // Sem tempo decorrido, nada muda.
+    const zero = P(alvo(600, 0), 1000);
+    // 100ms a 600px/s = 60px à frente.
+    const meio = P(alvo(600, 0), 1100);
+    // Passado o teto, CONGELA: 1s de silêncio não vira 600px de invenção.
+    const teto = P(alvo(600, 0), 2000);
+    const noTeto = P(alvo(600, 0), 1000 + LAN_EXTRAPOLA_MAX_MS);
+    // Entidade parada não é projetada.
+    const parado = P(alvo(5, 5), 1500);
+    // Relógio para trás (restart de cena) não puxa a entidade para trás.
+    const passado = P(alvo(600, 0), 500);
+
+    return (
+      zero.x === 100 &&
+      Math.abs(meio.x - 160) < 0.001 &&
+      Math.abs(teto.x - noTeto.x) < 0.001 &&
+      teto.x < 100 + 600 * 1 &&
+      parado.x === 100 &&
+      parado.y === 100 &&
+      passado.x === 100 &&
+      // Projeta nos dois eixos.
+      Math.abs(P(alvo(0, -400), 1100).y - 60) < 0.001 &&
+      // Alvo ausente não quebra o desenho.
+      P(null, 1000).x === 0
+    );
+  })(),
+  "GameScene.lansync.js: projeção do alvo da rede fora do esperado",
+);
 
 console.assert(
   ["startLanSync", "sendLanPacket", "applyLanPacket", "aplicarEntidade"].every(
