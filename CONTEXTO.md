@@ -244,7 +244,7 @@ Score-based decision:
 - `checkOutOfBounds()` (3291) — determina THROW_IN / CORNER_KICK / GOAL_KICK, reposiciona bola
 - `_openPauseMenu()` (3605) / `_closePauseMenu()` (3709) — overlay DOM do pause
 
-**States (this.gameState):** `PLAYING / THROW_IN / CORNER_KICK / GOAL_KICK / CELEBRATION / PAUSED`
+**States (this.gameState):** `PLAYING / THROW_IN / CORNER_KICK / GOAL_KICK / FREE_KICK / CELEBRATION / PAUSED`. "É bola parada?" é `ehBolaParada(state)`, não uma lista copiada.
 
 **Times:** 5 jogadores de linha + 1 goleiro por time. Escalação por formações: 3-1 / 2-2 / 4-0.
 
@@ -257,6 +257,7 @@ Score-based decision:
 | W A S D | Mover jogador |
 | Shift (esq) | Sprint (custa estamina) |
 | Espaço | Dash / Bote / Tackle |
+| Shift + Espaço | **Carrinho**: alcança 62 (bote 36), corre 1.85x (bote 1.38), dura 340ms, custa 1.6x de fôlego, deixa 900ms no chão quando erra e a falta dele é amarelo na hora |
 | Clique Esquerdo segurar | Carregar força de chute |
 | Clique Esquerdo soltar | Chutar direção do mouse |
 | Clique Direito curto | Passe inteligente → aliado mais apropriado |
@@ -894,6 +895,75 @@ a bola é o anfitrião.
   cobre o buraco com o frame 000 e evita o 404.
 - **Check de paleta** vira aviso, não asserção — ele valida a arte de origem.
 - **Sem áudio:** zero `load.audio`; `audio: { noAudio: true }` no `main.js`.
-- **`TACTICS` (3-1 / 2-2 / 4-0) é atribuído e nunca lido** — a formação é
-  sempre o losango do `FORMATION.SHAPE`.
-- **Sem arbitragem:** não existe falta, cartão nem impedimento.
+- **Sem impedimento — de propósito.** O jogo é 5v5 de quadra (fixo/ala/pivô) e
+  futsal não tem impedimento. Não é pendência: é a regra do esporte.
+- **Expulsão não vale em LAN.** O convidado endereça boneco por `lado_POSICAO`
+  e não existe evento de expulsão no pacote: tirar um da lista só no anfitrião
+  deixaria um fantasma parado no campo do outro. Em LAN o 2º amarelo sai como
+  cartão e o jogador CONTINUA em campo (`cartaoPor` para em `if (!this.lan)`).
+- **Cartão não sobrevive à partida.** `faltas`/`amarelos` moram na entidade;
+  suspensão para o jogo seguinte não existe.
+
+### Falta, cartão, pênalti e tática (resolvidos)
+
+**Falta** — `FOUL` em `constants.js` (raio de contato + chance + `CARD_EVERY`) e
+`GameScene.chamarFalta()`. O gatilho é o ramo de bote ERRADO no `update()`: se
+o bote não pegou a bola e o infrator está dentro de `ballHitRange +
+FOUL.CONTACT_BAND` do adversário, o árbitro apita. Bote limpo nunca chega lá.
+A faixa é relativa ao ALCANCE de quem entrou, não um raio fixo: com 52 cravado o
+carrinho (alcance 62) pegava a bola antes de qualquer contato e nunca cometia
+falta. Cartão sai por CARRINHO (na hora) ou por reincidência — falta comum
+sozinha não dá cartão, senão a partida vira chuva de amarelo.
+O carrinho em si (`Player.iniciarBote`, SHIFT+ESPAÇO) é o bote com outros
+números e `isSliding` ligado; bot não dá carrinho. `GameStates.FREE_KICK` é bola
+parada como qualquer outra e reusa `setupSetPiece` — o ponto viaja em
+`_faltaPonto` porque o reposicionamento só acontece 400ms depois, no fim do
+fade, quando a bola já teria andado colada no pé da vítima. Falta é regra que
+mexe a bola: **autoridade do anfitrião**, como gol e saída de bola.
+
+`ehBolaParada(state)` (constants.js) responde "é bola parada?" num lugar só —
+`Player`, `Enemy` e `AIBrain` tinham a mesma tripla copiada, e um estado novo
+só valeria em quem lembrasse de editar os três.
+
+**Pênalti** — falta do DEFENSOR dentro da própria área vira `GameStates.PENALTY`
+e a bola vai para a marca que o `drawPitch` já pinta (`marcaPenalti`). Quem
+defende qual lado troca no intervalo: a conta é a mesma do `checkOutOfBounds`
+(`infrator.isPlayerTeam ? isSecondHalf : !isSecondHalf`). `dentroDaArea()` usa o
+MESMO retângulo desenhado no campo — `GK_AREA_WIDTH` é o vão em Y,
+`GK_AREA_HEIGHT` é a profundidade em X, e trocar os dois erra calado. Fora da
+área o tiro livre continua recuado até a linha da área. O batedor da IA mira o
+gol daquele lado, não o meio de campo.
+
+**Cartão** — `cartaoPor()`: a cada `FOUL.CARD_EVERY` faltas do MESMO jogador sai
+um amarelo, e o segundo amarelo é vermelho. Sem sorteio, de propósito — cartão
+que não dá para antecipar não muda como se joga. `expulsar()` tira o boneco das
+listas (`allPlayers`/`allies`/`enemies`/`playerTeam`), desliga corpo e sprite e
+**não destrói**: `lastTouch`, quadro do replay e o colisor criado no `create()`
+ainda apontam para ele, e método em sprite destruído derruba o frame. Expulso o
+boneco controlado, o controle passa direto para quem sobrou — sem
+`switchPlayer`, que recusa troca em posse de bola e fora do modo `full`.
+
+**Cartão na tela** — uma tira amarela em pé por cartão, acima do nome
+(`desenharCartoes`, medidas e cor em `CARD_HUD`), movida pelo mesmo loop que já
+move os rótulos de nome. No placar, uma tira vermelha por expulso do lado do
+time que ficou com menos gente (`this.expulsos` + `.hud-red` no ui.css). Como o
+segundo amarelo já expulsa, na prática cada jogador exibe no máximo UMA tira
+amarela — a fileira é genérica porque a regra do cartão pode mudar sozinha em
+`FOUL.CARD_EVERY`. Ao expulsar, tiras e rótulo de nome são destruídos: o loop
+que os move ignora entidade inativa e eles ficariam parados no campo.
+
+**Selo de versão** — `GAME_VERSION` (constants.js) escrito pelo `main.js` no
+`#app-version`, que vive no `index.html` e portanto aparece em TODA cena,
+inclusive no menu. É o detector de cache: canto com número velho = JS velho.
+
+**Tática persistida** — `careerMode.tactic` entra no save, é sanitizada no load
+(tática que não existe mais cai no 3-1) e o `GameScene.create()` a lê. O menu de
+pausa grava de volta na hora da troca. Exibição e LAN não têm carreira: nascem
+no 3-1 e a troca vale só para aquela partida.
+
+**Tática** — `FORMATION.SHAPES` tem uma forma por tática (3-1 losango, 2-2
+quadrado, 4-0 linha de quatro) e `TacticManager.shapeOf(bot, papel)` é quem
+lê `bot.tactic`; tática ausente ou desconhecida cai no 3-1. `GameScene`
+publica `playerTactic`/`enemyTactic` e é de lá que sai o `tactic` de todo
+boneco. A troca fica no **menu de pausa** (botão TÁTICA, cicla as três) e vale
+para quem está em campo naquele momento — a substituição troca gente do time.

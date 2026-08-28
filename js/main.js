@@ -111,4 +111,10 @@ game.events.once(Phaser.Core.Events.READY, () => {
 
   // Camadas DOM e curvatura: uma vez, no boot.
   EfeitosVisuais.aplicar(game);
+
+  // Versão no canto: escrita aqui, e não no HTML, para ter UMA fonte
+  // (`GAME_VERSION`). Se o canto mostrar número velho, o cache é que está
+  // velho — o texto e o resto do JS vêm do mesmo arquivo.
+  const selo = document.getElementById("app-version");
+  if (selo) selo.textContent = "v" + GAME_VERSION;
 });

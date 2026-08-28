@@ -122,10 +122,12 @@ Object.assign(GameScene.prototype, {
         <div class="hud-teams">
           <div class="hud-team hud-team-home" style="border-bottom-color:${this._teamAccent(home)};">
             <span class="hud-acr">${clubAcronym(home)}</span>
+            <span class="hud-reds" id="hud-reds-home"></span>
             <span class="hud-goals" id="hud-goals-home">${golsCasa}</span>
           </div>
           <div class="hud-team hud-team-away" style="border-bottom-color:${this._teamAccent(away)};">
             <span class="hud-goals" id="hud-goals-away">${golsFora}</span>
+            <span class="hud-reds" id="hud-reds-away"></span>
             <span class="hud-acr">${clubAcronym(away)}</span>
           </div>
         </div>
@@ -142,6 +144,22 @@ Object.assign(GameScene.prototype, {
       casa.textContent = homeIsPlayer ? this.scorePlayer : this.scoreOpponent;
     if (fora)
       fora.textContent = homeIsPlayer ? this.scoreOpponent : this.scorePlayer;
+
+    // Uma tira vermelha por expulso, do lado do time que ficou com menos gente.
+    // `casa/fora` é do ponto de vista de quem MANDA o jogo, e a contagem é por
+    // time (PLAYER/OPPONENT) — inverter aqui é o mesmo cuidado do placar.
+    const expulsos = this.expulsos || { PLAYER: 0, OPPONENT: 0 };
+    const tira = (n) => '<i class="hud-red"></i>'.repeat(n);
+    const vermelhosCasa = document.getElementById("hud-reds-home");
+    const vermelhosFora = document.getElementById("hud-reds-away");
+    if (vermelhosCasa)
+      vermelhosCasa.innerHTML = tira(
+        homeIsPlayer ? expulsos.PLAYER : expulsos.OPPONENT,
+      );
+    if (vermelhosFora)
+      vermelhosFora.innerHTML = tira(
+        homeIsPlayer ? expulsos.OPPONENT : expulsos.PLAYER,
+      );
 
     const relogio = document.getElementById("hud-clock");
     if (relogio) {
@@ -316,6 +334,10 @@ Object.assign(GameScene.prototype, {
       '<span class="pause-icon">🔄</span> ' +
       subLabel +
       "</button>" +
+      '<button class="pui-pause-btn" id="pause-tatica">' +
+      '<span class="pause-icon">📐</span> TÁTICA: ' +
+      (this.playerTactic || TACTICS.T3_1) +
+      "</button>" +
       '<button class="pui-pause-btn" id="pause-config">' +
       '<span class="pause-icon">⚙</span> CONFIGURAÇÕES' +
       "</button>" +
@@ -349,6 +371,26 @@ Object.assign(GameScene.prototype, {
       }
       if (id === "pause-sub") {
         if (!this._substitutionUsed) this._openSubstitutionMenu();
+        return;
+      }
+      if (id === "pause-tatica") {
+        // Roda 3-1 → 2-2 → 4-0. Vale para quem ESTÁ em campo (a substituição
+        // troca gente do time, então não dá para usar a lista fixa do início).
+        const ordem = [TACTICS.T3_1, TACTICS.T2_2, TACTICS.T4_0];
+        this.playerTactic =
+          ordem[(ordem.indexOf(this.playerTactic) + 1) % ordem.length];
+        this.allPlayers
+          .filter((p) => p.isPlayerTeam)
+          .forEach((p) => (p.tactic = this.playerTactic));
+        // Vale para o próximo jogo também. Exibição e LAN não têm carreira.
+        if (window.careerMode) {
+          window.careerMode.tactic = this.playerTactic;
+          window.careerMode.saveToLocalStorage();
+        }
+        const btn = el.querySelector("#pause-tatica");
+        if (btn)
+          btn.innerHTML =
+            '<span class="pause-icon">📐</span> TÁTICA: ' + this.playerTactic;
         return;
       }
       if (id === "pause-config") {

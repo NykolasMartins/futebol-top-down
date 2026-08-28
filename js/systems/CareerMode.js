@@ -134,6 +134,10 @@ class CareerMode {
     // Copas: NÃO existe estado local. As duas (continental e doméstica) são
     // torneios do mundo, em `world.season.tournaments`. Ver playerCups().
 
+    // Tática do time do usuário. Escolhida no menu de pausa da partida e
+    // guardada aqui para valer no jogo seguinte.
+    this.tactic = TACTICS.T3_1;
+
     // Mercado de transferências
     this.transferOffers = [];
     this.transferWindowOpen = false;
@@ -2324,6 +2328,7 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       globalPlayerStats: this.globalPlayerStats,
       topScorers: this.topScorers,
       transferOffers: this.transferOffers,
+      tactic: this.tactic,
       playerMoney: this.playerMoney,
       monthlySalary: this.monthlySalary,
       lastSalaryDay: this.lastSalaryDay,
@@ -2373,6 +2378,11 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       // brasileiros que nada mais lê. As copas agora são torneios do mundo,
       // reconstruídos da worldSeed — o objeto salvo é lixo e vai embora calado.
       delete this.copa;
+      // Tática de save antigo (ou de uma tática que deixou de existir) não vale
+      // nada: `shapeOf` cairia no 3-1 e a tela mostraria outra coisa. Filtra no
+      // load, como manda a regra do estado persistido.
+      if (!Object.values(TACTICS).includes(this.tactic))
+        this.tactic = TACTICS.T3_1;
       if (!this.currentTeam.tier) this.currentTeam.tier = 3;
       if (this.leagueTable) {
         this.leagueTable.forEach((t) => {

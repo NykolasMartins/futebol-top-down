@@ -121,7 +121,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     this.moveAngle = 90;
     this.isPlayerTeam = false;
     this.archetype = "PIVOT";
-    this.tactic = "3-1";
+    this.tactic = TACTICS.T3_1;
     this.receivedPassFlag = false; // Flag para chute de primeira
 
     // Inicializar alvos dinâmicos
@@ -157,13 +157,7 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
 
   handleMovement(dt, delta) {
     // Impedir que o jogador saia andando com a bola durante estados de bola parada
-    const state = this.scene.gameState;
-    const states = this.scene.GameStates;
-    const isSetPiece =
-      states &&
-      (state === states.THROW_IN ||
-        state === states.CORNER_KICK ||
-        state === states.GOAL_KICK);
+    const isSetPiece = ehBolaParada(this.scene.gameState);
 
     if (isSetPiece) {
       this.customVel.set(0, 0);
@@ -293,23 +287,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
       }
       this.previousR1State = currentR1State;
 
-      if (
-        shouldTackle &&
-        this.dashCooldown <= 0 &&
-        this.currentStamina >= (this.dashStaminaCost || STAMINA.DASH_COST)
-      ) {
-        this.dashTimer = 190;
-        this.dashCooldown = 1050;
-        this.isDashing = true;
-        this.tackleHit = false;
-        this.currentStamina -= this.dashStaminaCost || STAMINA.DASH_COST;
-        this.timeSinceLastStaminaUsed = 0;
-        let rad = Phaser.Math.DegToRad(this.moveAngle);
-        this.customVel.x = Math.cos(rad) * this.sprintSpeed * 1.38;
-        this.customVel.y = Math.sin(rad) * this.sprintSpeed * 1.38;
-        if (this.scene.spawnImpactDust)
-          this.scene.spawnImpactDust(this.x, this.y, 0xd8c08a);
-      }
+      // Mesmo bote do `Player`: este ramo só roda quando um ALIADO virou o
+      // boneco controlado (a troca de jogador põe um `Enemy` no comando), então
+      // o carrinho tem de valer igual. Um lugar só — ver Player.iniciarBote.
+      if (shouldTackle) Player.iniciarBote(this);
     }
 
     if (!this.isDashing) {
@@ -393,6 +374,10 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
       if (this.dashTimer <= 0) {
         if (this.isDashing && !this.tackleHit) {
           this.tackleSlowTimer = Math.max(this.tackleSlowTimer, 520);
+          this.tackleSlowTimer = Math.max(
+            this.tackleSlowTimer || 0,
+            Player.lentidaoDoErro(this),
+          );
           if (this.scene.showFloatingText)
             this.scene.showFloatingText(
               this.x,

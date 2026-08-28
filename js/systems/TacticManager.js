@@ -18,11 +18,34 @@ const TACTICS = {
  * do segundo tempo não precisar de nada.
  */
 const FORMATION = {
-  SHAPE: {
-    [ARCHETYPES.FIXO]: { depth: 0.22, lane: 0.5 },
-    [ARCHETYPES.WING_L]: { depth: 0.5, lane: 0.16 },
-    [ARCHETYPES.WING_R]: { depth: 0.5, lane: 0.84 },
-    [ARCHETYPES.PIVOT]: { depth: 0.78, lane: 0.5 },
+  // Uma forma por TÁTICA. Antes existia um losango só e `bot.tactic` era
+  // escrito por todo o GameScene sem ninguém ler — trocar de tática não mudava
+  // um pixel. O lado do ala (lane) é preservado nas três; o que muda é a
+  // profundidade e, no 4-0, a largura.
+  SHAPES: {
+    // 3-1, o losango: um fixo, dois alas abertos, um pivô na frente.
+    [TACTICS.T3_1]: {
+      [ARCHETYPES.FIXO]: { depth: 0.22, lane: 0.5 },
+      [ARCHETYPES.WING_L]: { depth: 0.5, lane: 0.16 },
+      [ARCHETYPES.WING_R]: { depth: 0.5, lane: 0.84 },
+      [ARCHETYPES.PIVOT]: { depth: 0.78, lane: 0.5 },
+    },
+    // 2-2, o quadrado: dois atrás, dois na frente. Mais seguro na saída, com
+    // menos gente no meio.
+    [TACTICS.T2_2]: {
+      [ARCHETYPES.FIXO]: { depth: 0.24, lane: 0.3 },
+      [ARCHETYPES.WING_R]: { depth: 0.24, lane: 0.7 },
+      [ARCHETYPES.WING_L]: { depth: 0.74, lane: 0.3 },
+      [ARCHETYPES.PIVOT]: { depth: 0.74, lane: 0.7 },
+    },
+    // 4-0: linha de quatro, sem pivô fixo. Ocupa toda a largura no campo de
+    // ataque — a zona do pivô nasce ocupada e o giro não dispara.
+    [TACTICS.T4_0]: {
+      [ARCHETYPES.WING_L]: { depth: 0.58, lane: 0.1 },
+      [ARCHETYPES.FIXO]: { depth: 0.5, lane: 0.37 },
+      [ARCHETYPES.PIVOT]: { depth: 0.5, lane: 0.63 },
+      [ARCHETYPES.WING_R]: { depth: 0.58, lane: 0.9 },
+    },
   },
   PUSH_UP: 0.12, // com a posse o bloco inteiro sobe
   DROP_BACK: 0.12, // sem a posse recua: o posto fica ENTRE a bola e o gol
@@ -60,6 +83,16 @@ class TacticManager {
     const dele = isPlayerTeam ? scene.scoreOpponent : scene.scorePlayer;
     if (meu === dele) return null;
     return meu < dele ? "desperate" : "stall";
+  }
+
+  /**
+   * Forma do bot na tática DELE. `papel` sobrepõe o arquétipo (é o giro de
+   * futsal). Tática ausente ou desconhecida cai no 3-1 — bot velho de save ou
+   * de pacote de rede não pode ficar sem posto.
+   */
+  shapeOf(bot, papel) {
+    const forma = FORMATION.SHAPES[bot.tactic] || FORMATION.SHAPES[TACTICS.T3_1];
+    return forma[papel || bot.archetype];
   }
 
   getAttackDir(bot) {
@@ -139,7 +172,7 @@ class TacticManager {
     const pY = this.scene.PITCH_Y || 200;
     const pW = this.scene.PITCH_WIDTH || 1600;
     const pH = this.scene.PITCH_HEIGHT || 1000;
-    const forma = FORMATION.SHAPE[ARCHETYPES.PIVOT];
+    const forma = this.shapeOf(bot, ARCHETYPES.PIVOT);
     const depth = this.getAttackDir(bot) > 0 ? forma.depth : 1 - forma.depth;
     return { x: pX + depth * pW, y: pY + forma.lane * pH };
   }
@@ -189,7 +222,7 @@ class TacticManager {
    * cima um do outro (medido: 10px de distância).
    */
   postoBase(bot) {
-    const forma = FORMATION.SHAPE[bot.archetype];
+    const forma = this.shapeOf(bot);
     if (!forma) return null;
     const pX = this.scene.PITCH_X || 200;
     const pY = this.scene.PITCH_Y || 200;
@@ -206,7 +239,7 @@ class TacticManager {
    * atrás da bola em vez de manter forma. Aqui a bola só DESLOCA o losango.
    */
   getTargetPosition(bot) {
-    if (!FORMATION.SHAPE[bot.archetype]) return null;
+    if (!this.shapeOf(bot)) return null;
 
     const pX = this.scene.PITCH_X || 200;
     const pY = this.scene.PITCH_Y || 200;
@@ -227,7 +260,7 @@ class TacticManager {
 
     // Giro de futsal: o ala promovido joga com a forma do pivô.
     const papel = this.rotatedShapeKey(bot);
-    const forma = FORMATION.SHAPE[papel];
+    const forma = this.shapeOf(bot, papel);
 
     const comPosse = this.teamHasBall(bot);
     // Desespero: goleiro-linha. O bloco inteiro sobe e o fixo abandona o posto.
@@ -392,7 +425,7 @@ console.assert(
         // um é o posto do fixo do outro, espelhado — e isso é a formação
         // correta, não colisão.
         const postosDo = (meuTime) =>
-          Object.keys(FORMATION.SHAPE).map((arq) => {
+          Object.keys(FORMATION.SHAPES[TACTICS.T3_1]).map((arq) => {
             const p = tm.postoBase({ archetype: arq, isPlayerTeam: meuTime });
             return Math.round(p.x) + "," + Math.round(p.y);
           });
@@ -468,7 +501,56 @@ console.assert(
           pos(ARCHETYPES.FIXO, cena(1500, 700, { isPlayerTeam: true })).x,
       ) > 100 &&
       // Arquétipo desconhecido não inventa posto (goleiro cai aqui).
-      new TacticManager(meio).getTargetPosition(bot("GK")) === null
+      new TacticManager(meio).getTargetPosition(bot("GK")) === null &&
+      // As TRÊS táticas existem e são DIFERENTES entre si. Este é o check da
+      // regressão original: `bot.tactic` era escrito e nunca lido, então
+      // trocar de tática não mexia um pixel.
+      (() => {
+        const tm = new TacticManager(cena(1000, 700, null));
+        const posto = (arq, tatica) =>
+          tm.postoBase({ archetype: arq, isPlayerTeam: true, tactic: tatica });
+        const arqs = Object.keys(ARCHETYPES);
+        const cada = (tatica) =>
+          arqs.map((a) => {
+            const p = posto(a, tatica);
+            return Math.round(p.x) + "," + Math.round(p.y);
+          });
+        const t31 = cada(TACTICS.T3_1);
+        const t22 = cada(TACTICS.T2_2);
+        const t40 = cada(TACTICS.T4_0);
+        // Tática desconhecida (ou ausente) cai no 3-1 e não fica sem posto.
+        const semTatica = cada(undefined);
+        const xDe = (arq, tatica) => posto(arq, tatica).x;
+        return (
+          // Ninguém empilhado dentro da mesma tática.
+          new Set(t31).size === 4 &&
+          new Set(t22).size === 4 &&
+          new Set(t40).size === 4 &&
+          // E as três desenham times diferentes.
+          t31.join() !== t22.join() &&
+          t31.join() !== t40.join() &&
+          t22.join() !== t40.join() &&
+          semTatica.join() === t31.join() &&
+          // 2-2: dois atrás e dois na frente (ataca para a ESQUERDA, atrás é
+          // X MAIOR). Fixo e ala direito atrás; ala esquerdo e pivô na frente.
+          Math.min(
+            xDe(ARCHETYPES.FIXO, TACTICS.T2_2),
+            xDe(ARCHETYPES.WING_R, TACTICS.T2_2),
+          ) >
+            Math.max(
+              xDe(ARCHETYPES.WING_L, TACTICS.T2_2),
+              xDe(ARCHETYPES.PIVOT, TACTICS.T2_2),
+            ) &&
+          // 4-0: os quatro na MESMA faixa de profundidade (linha), enquanto no
+          // 3-1 o fixo e o pivô estão nas pontas opostas do campo.
+          Math.max(...arqs.map((a) => xDe(a, TACTICS.T4_0))) -
+            Math.min(...arqs.map((a) => xDe(a, TACTICS.T4_0))) <
+            200 &&
+          Math.max(...arqs.map((a) => xDe(a, TACTICS.T3_1))) -
+            Math.min(...arqs.map((a) => xDe(a, TACTICS.T3_1))) >
+            700
+        );
+      })()
     );
   })(),
   "TacticManager: losango fora de forma (fixo/pivô/alas ou basculação)",

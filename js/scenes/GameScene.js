@@ -341,6 +341,16 @@ class GameScene extends Phaser.Scene {
 
     this.tacticManager = new TacticManager(this);
 
+    // Tática de cada lado. Ponto único: é daqui que sai o `tactic` de todos os
+    // bonecos, e é isto que o menu de pausa troca no meio do jogo. Na carreira
+    // ela vem do save (o menu de pausa grava de volta).
+    this.playerTactic =
+      (window.careerMode && window.careerMode.tactic) || TACTICS.T3_1;
+    this.enemyTactic = TACTICS.T3_1;
+
+    // Expulsos por time, para as tiras vermelhas do placar.
+    this.expulsos = { PLAYER: 0, OPPONENT: 0 };
+
     // === ATRIBUTOS DO CAREER MODE ===
     const career = window.careerMode;
     let playerSpeed = career ? career.speed : 75;
@@ -405,7 +415,7 @@ class GameScene extends Phaser.Scene {
       );
     }
     this.player.archetype = ARCHETYPES.PIVOT;
-    this.player.tactic = TACTICS.T3_1;
+    this.player.tactic = this.playerTactic;
     this.player.isPlayerTeam = true;
 
     this.allies = [];
@@ -425,7 +435,7 @@ class GameScene extends Phaser.Scene {
       lookAliado(0),
     );
     allyFixo.archetype = ARCHETYPES.FIXO;
-    allyFixo.tactic = TACTICS.T3_1;
+    allyFixo.tactic = this.playerTactic;
     allyFixo.isPlayerTeam = true;
     this.allies.push(allyFixo);
 
@@ -440,7 +450,7 @@ class GameScene extends Phaser.Scene {
       lookAliado(1),
     );
     allyWingL.archetype = ARCHETYPES.WING_L;
-    allyWingL.tactic = TACTICS.T3_1;
+    allyWingL.tactic = this.playerTactic;
     allyWingL.isPlayerTeam = true;
     this.allies.push(allyWingL);
 
@@ -455,7 +465,7 @@ class GameScene extends Phaser.Scene {
       lookAliado(2),
     );
     allyWingR.archetype = ARCHETYPES.WING_R;
-    allyWingR.tactic = TACTICS.T3_1;
+    allyWingR.tactic = this.playerTactic;
     allyWingR.isPlayerTeam = true;
     this.allies.push(allyWingR);
 
@@ -485,7 +495,7 @@ class GameScene extends Phaser.Scene {
       lookRival(0),
     );
     this.enemy.archetype = ARCHETYPES.PIVOT;
-    this.enemy.tactic = TACTICS.T3_1;
+    this.enemy.tactic = this.enemyTactic;
     this.enemy.isPlayerTeam = false;
     this.enemies.push(this.enemy);
 
@@ -500,7 +510,7 @@ class GameScene extends Phaser.Scene {
       lookRival(1),
     );
     enemyFixo.archetype = ARCHETYPES.FIXO;
-    enemyFixo.tactic = TACTICS.T3_1;
+    enemyFixo.tactic = this.enemyTactic;
     enemyFixo.isPlayerTeam = false;
     this.enemies.push(enemyFixo);
 
@@ -515,7 +525,7 @@ class GameScene extends Phaser.Scene {
       lookRival(2),
     );
     enemyWingL.archetype = ARCHETYPES.WING_L;
-    enemyWingL.tactic = TACTICS.T3_1;
+    enemyWingL.tactic = this.enemyTactic;
     enemyWingL.isPlayerTeam = false;
     this.enemies.push(enemyWingL);
 
@@ -530,7 +540,7 @@ class GameScene extends Phaser.Scene {
       lookRival(3),
     );
     enemyWingR.archetype = ARCHETYPES.WING_R;
-    enemyWingR.tactic = TACTICS.T3_1;
+    enemyWingR.tactic = this.enemyTactic;
     enemyWingR.isPlayerTeam = false;
     this.enemies.push(enemyWingR);
 
@@ -729,7 +739,7 @@ class GameScene extends Phaser.Scene {
           text-align:center;
           letter-spacing:1px;
         ">
-          WASD: MOVER &nbsp; | &nbsp; CLIQUE ESQUERDO: PASSE/CHUTE &nbsp; | &nbsp; ESPAÇO: BOTE
+          WASD: MOVER &nbsp; | &nbsp; CLIQUE ESQUERDO: PASSE/CHUTE &nbsp; | &nbsp; ESPAÇO: BOTE &nbsp; | &nbsp; SHIFT+ESPAÇO: CARRINHO
         </div>
       </div>
     `;
@@ -1162,8 +1172,9 @@ class GameScene extends Phaser.Scene {
             );
             // O alcance do desarme sai de TACKLE, não de um número solto aqui,
             // e cresce com `defending`: bom zagueiro cobre mais espaço.
+            const carrinho = !!tackler.isSliding;
             const ballHitRange =
-              TACKLE.BALL_HIT_RANGE *
+              (carrinho ? TACKLE.SLIDE_BALL_HIT_RANGE : TACKLE.BALL_HIT_RANGE) *
               statWeight(
                 (tackler.stats || DEFAULT_STATS).defending,
                 AI_BEHAVIOR.STAT_DEFENDING_REACH_AMPLITUDE,
@@ -1216,6 +1227,24 @@ class GameScene extends Phaser.Scene {
               tackler.dashTimer = 0;
               tackler.tackleSlowTimer = 400;
               tackler.customVel.set(0, 0);
+
+              // FALTA: errou a bola e pegou o HOMEM. O bote limpo (acima) nunca
+              // chega aqui. Autoridade do anfitrião, como toda regra que
+              // reposiciona a bola.
+              const distToVictim = Phaser.Math.Distance.Between(
+                tackler.x,
+                tackler.y,
+                victim.x,
+                victim.y,
+              );
+              if (
+                distToVictim <= ballHitRange + FOUL.CONTACT_BAND &&
+                Math.random() <
+                  (carrinho ? FOUL.SLIDE_CHANCE : FOUL.CHANCE) &&
+                !(this.lan && !this.souHostLan)
+              ) {
+                this.chamarFalta(tackler, victim, carrinho);
+              }
             }
           });
         }
@@ -2443,6 +2472,21 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Posto de recomeço número `i`, em offset do meio de campo (o eixo do ataque
+   * é X). Volta ao começo da lista se pedirem mais gente do que há posto — dois
+   * juntos é feio, `undefined` derruba o frame.
+   */
+  postoRecomeco(i) {
+    const postos = [
+      { dx: 100, dy: 0 },
+      { dx: 300, dy: 0 },
+      { dx: 150, dy: -250 },
+      { dx: 150, dy: 250 },
+    ];
+    return postos[i % postos.length];
+  }
+
   resetMatch() {
     if (this.isGameOver) return;
 
@@ -2454,15 +2498,28 @@ class GameScene extends Phaser.Scene {
     const playerDir = this.isSecondHalf ? -1 : 1;
     const enemyDir = -playerDir;
 
-    this.player.setPosition(cx + playerDir * 100, cy);
-    this.allies[0].setPosition(cx + playerDir * 300, cy);
-    this.allies[1].setPosition(cx + playerDir * 150, cy - 250);
-    this.allies[2].setPosition(cx + playerDir * 150, cy + 250);
+    // Quem recomeça é QUEM ESTÁ EM CAMPO. Nada de `allies[2]`/`enemies[3]`
+    // fixo: uma expulsão encurta a lista e o índice vira
+    // `undefined.setPosition` — o jogo caía no gol seguinte. A fonte é
+    // `allPlayers`, a MESMA lista que o `update()` percorre.
+    const recolocar = (lista, dir) =>
+      lista.forEach((p, i) => {
+        const posto = this.postoRecomeco(i);
+        p.setPosition(cx + dir * posto.dx, cy + posto.dy);
+      });
 
-    this.enemies[0].setPosition(cx + enemyDir * 100, cy);
-    this.enemies[1].setPosition(cx + enemyDir * 300, cy);
-    this.enemies[2].setPosition(cx + enemyDir * 150, cy - 250);
-    this.enemies[3].setPosition(cx + enemyDir * 150, cy + 250);
+    const meuTime = this.allPlayers.filter((p) => p.isPlayerTeam);
+    // O boneco controlado abre a fila do time dele: é ele que sai jogando.
+    recolocar(
+      meuTime.includes(this.player)
+        ? [this.player, ...meuTime.filter((p) => p !== this.player)]
+        : meuTime,
+      playerDir,
+    );
+    recolocar(
+      this.allPlayers.filter((p) => !p.isPlayerTeam),
+      enemyDir,
+    );
 
     if (this.allPlayers) {
       this.allPlayers.forEach((p) => {
@@ -2600,6 +2657,17 @@ class GameScene extends Phaser.Scene {
       const entity = label.targetEntity;
       if (!entity || !entity.active) return;
       label.setPosition(entity.x, entity.y - 34);
+
+      // As tiras de cartão andam junto, centradas acima do nome.
+      const marcas = entity.cardMarks;
+      if (!marcas || marcas.length === 0) return;
+      const passo = CARD_HUD.W + CARD_HUD.GAP;
+      marcas.forEach((m, i) =>
+        m.setPosition(
+          entity.x + (i - (marcas.length - 1) / 2) * passo,
+          entity.y - CARD_HUD.Y_OFFSET,
+        ),
+      );
     });
   }
 
@@ -2760,6 +2828,158 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Apita a falta: bola parada no ponto do contato, posse de quem sofreu.
+   * O ponto vai em `_faltaPonto` porque o `setupSetPiece` só reposiciona
+   * depois de 400ms de fade — até lá a bola ainda está colada no pé da vítima
+   * e teria andado o campo inteiro.
+   */
+  chamarFalta(infrator, vitima, carrinho = false) {
+    if (this.gameState !== GameStates.PLAYING || this.isSettingUpSetPiece)
+      return;
+    this.isSettingUpSetPiece = true;
+    this._faltaPonto = { x: vitima.x, y: vitima.y };
+
+    // Pênalti: falta do DEFENSOR dentro da própria área. Quem defende a
+    // esquerda troca no intervalo — a conta é a mesma do `checkOutOfBounds`.
+    const defendeEsquerda = infrator.isPlayerTeam
+      ? this.isSecondHalf
+      : !this.isSecondHalf;
+    const penalti = this.dentroDaArea(vitima.x, vitima.y, defendeEsquerda);
+
+    this.cartaoPor(infrator, carrinho);
+    if (infrator === this.player)
+      this.updateMatchRating(penalti ? -0.6 : -0.3, "Falta");
+    this.showFloatingText(
+      vitima.x,
+      vitima.y - 40,
+      penalti ? "PÊNALTI!" : "FALTA!",
+      "#ff5555",
+    );
+    EfeitosVisuais.tremer(this, penalti ? 180 : 120, 0.005);
+    this.setupSetPiece(
+      penalti ? GameStates.PENALTY : GameStates.FREE_KICK,
+      defendeEsquerda ? "top" : "bottom",
+      vitima.isPlayerTeam ? "PLAYER" : "OPPONENT",
+    );
+  }
+
+  /** A grande área de um dos lados — o MESMO retângulo desenhado no campo. */
+  dentroDaArea(x, y, esquerda) {
+    const cY = PITCH_Y + PITCH_HEIGHT / 2;
+    if (Math.abs(y - cY) > GK_AREA_WIDTH / 2) return false;
+    return esquerda
+      ? x <= PITCH_X + GK_AREA_HEIGHT
+      : x >= PITCH_X + PITCH_WIDTH - GK_AREA_HEIGHT;
+  }
+
+  /** Marca do pênalti, a mesma que o `drawPitch` pinta. */
+  marcaPenalti(esquerda) {
+    return {
+      x: esquerda
+        ? PITCH_X + GK_AREA_HEIGHT - 60
+        : PITCH_X + PITCH_WIDTH - GK_AREA_HEIGHT + 60,
+      y: PITCH_Y + PITCH_HEIGHT / 2,
+    };
+  }
+
+  /**
+   * Cartão por REINCIDÊNCIA (ver `FOUL.CARD_EVERY`) ou por ENTRADA DURA: falta
+   * de carrinho é amarelo na hora, porque ali não houve disputa de bola. 2º
+   * amarelo = vermelho. Falta comum, sozinha, não dá cartão — com um amarelo
+   * por falta a partida vira chuva de cartão, que foi o que aconteceu.
+   */
+  cartaoPor(infrator, carrinho = false) {
+    infrator.faltas = (infrator.faltas || 0) + 1;
+    if (!carrinho && infrator.faltas % FOUL.CARD_EVERY !== 0) return;
+
+    infrator.amarelos = (infrator.amarelos || 0) + 1;
+    this.desenharCartoes(infrator);
+    const vermelho = infrator.amarelos >= 2;
+    this.showFloatingText(
+      infrator.x,
+      infrator.y - 58,
+      vermelho ? "VERMELHO" : "AMARELO",
+      vermelho ? "#ff2222" : "#ffd400",
+    );
+    if (!vermelho) return;
+    // Em LAN o convidado endereça boneco por `lado_POSICAO` e não recebe evento
+    // de expulsão: tirar um da lista só do lado do anfitrião deixaria um
+    // fantasma parado no campo do outro. Fica no cartão até isso viajar no
+    // pacote.
+    if (!this.lan) this.expulsar(infrator);
+  }
+
+  /**
+   * Tira o jogador de campo. NÃO destrói o sprite: referência solta (lastTouch,
+   * dono de quadro do replay, colisor do create) continua por aí, e chamar
+   * método em sprite destruído derruba o frame inteiro. Fora das listas, o
+   * `update()` deixa de vê-lo.
+   */
+  /**
+   * Uma tira amarela em pé por cartão, acima do nome. Recria a fileira inteira
+   * a cada cartão em vez de acrescentar uma: são no máximo dois retângulos, e
+   * assim a centralização sai de graça.
+   */
+  desenharCartoes(entity) {
+    (entity.cardMarks || []).forEach((m) => m.destroy());
+    entity.cardMarks = [];
+    for (let i = 0; i < (entity.amarelos || 0); i++) {
+      entity.cardMarks.push(
+        this.add
+          .rectangle(entity.x, entity.y, CARD_HUD.W, CARD_HUD.H, CARD_HUD.YELLOW)
+          .setStrokeStyle(1, 0x000000)
+          .setDepth(36),
+      );
+    }
+    this.updateAthleteNameLabels();
+  }
+
+  expulsar(entity) {
+    entity.expulso = true;
+    const fora = (lista) => (lista || []).filter((p) => p !== entity);
+    this.allPlayers = fora(this.allPlayers);
+    this.allies = fora(this.allies);
+    this.enemies = fora(this.enemies);
+    this.playerTeam = fora(this.playerTeam);
+
+    // Expulso o boneco controlado, o controle passa para quem sobrou — sem
+    // `switchPlayer`, que recusa a troca em posse de bola e fora do modo full.
+    if (entity === this.player && this.playerTeam.length > 0) {
+      entity.isUserControlled = false;
+      this.player = this.playerTeam[0];
+      this.player.isUserControlled = true;
+      this.currentPlayerIndex = 0;
+      this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+      this.cancelKickCharge();
+    }
+
+    if (this.ball.owner === entity) this.ball.owner = null;
+    if (this.lastTouch === entity) this.lastTouch = null;
+
+    // O que estava DESENHADO em cima dele sai junto: o rótulo de nome e as
+    // tiras de cartão são objetos soltos da cena, e o loop que os move ignora
+    // entidade inativa — ficariam parados no campo como fantasma.
+    (entity.cardMarks || []).forEach((m) => m.destroy());
+    entity.cardMarks = [];
+    if (this.athleteNameLabels) {
+      this.athleteNameLabels = this.athleteNameLabels.filter((label) => {
+        if (label.targetEntity !== entity) return true;
+        label.destroy();
+        return false;
+      });
+    }
+
+    // Vermelhos no placar, do lado certo.
+    this.expulsos = this.expulsos || { PLAYER: 0, OPPONENT: 0 };
+    this.expulsos[entity.isPlayerTeam ? "PLAYER" : "OPPONENT"] += 1;
+    if (this.updateHUD) this.updateHUD();
+
+    entity.setActive(false).setVisible(false);
+    if (entity.body) entity.body.enable = false;
+    entity.setPosition(-9999, -9999);
+  }
+
   setupSetPiece(type, side, possessionTeam) {
     // 1. Iniciar Fade Out para esconder o teletransporte e reposicionamento
     this.cameras.main.fadeOut(400, 0, 0, 0);
@@ -2790,6 +3010,27 @@ class GameScene extends Phaser.Scene {
       } else if (type === GameStates.GOAL_KICK) {
         spawnY = PITCH_Y + PITCH_HEIGHT / 2;
         spawnX = side === "top" ? PITCH_X + 40 : PITCH_X + PITCH_WIDTH - 40;
+      } else if (type === GameStates.PENALTY) {
+        const marca = this.marcaPenalti(side === "top");
+        spawnX = marca.x;
+        spawnY = marca.y;
+        this._faltaPonto = null;
+      } else if (type === GameStates.FREE_KICK) {
+        const ponto = this._faltaPonto || { x: this.ball.x, y: this.ball.y };
+        // ponytail: falta dentro da área vira tiro livre na LINHA da área, não
+        // pênalti. Sem pênalti implementado, cobrar a 80px do gol com barreira
+        // a 180px é gol certo. Se um dia entrar pênalti, é aqui que ele desvia.
+        spawnX = Phaser.Math.Clamp(
+          ponto.x,
+          PITCH_X + GK_AREA_HEIGHT,
+          PITCH_X + PITCH_WIDTH - GK_AREA_HEIGHT,
+        );
+        spawnY = Phaser.Math.Clamp(
+          ponto.y,
+          PITCH_Y + 60,
+          PITCH_Y + PITCH_HEIGHT - 60,
+        );
+        this._faltaPonto = null;
       }
 
       this.ball.setPosition(spawnX, spawnY);
@@ -2866,6 +3107,8 @@ class GameScene extends Phaser.Scene {
       if (type === GameStates.THROW_IN) label = "LATERAL";
       else if (type === GameStates.CORNER_KICK) label = "ESCANTEIO";
       else if (type === GameStates.GOAL_KICK) label = "TIRO DE META";
+      else if (type === GameStates.FREE_KICK) label = "FALTA";
+      else if (type === GameStates.PENALTY) label = "PÊNALTI";
       this.showFloatingText(spawnX, spawnY, label, "#ffffff");
 
       // IA cobrando após o fade in (Inimigos OU Aliados se o jogador não for o dono)
@@ -2877,8 +3120,14 @@ class GameScene extends Phaser.Scene {
           ) {
             // Se for aliado, chuta para frente
             // Se for inimigo, chuta para o centro/ataque
-            const targetX = centerX;
-            const targetY = centerY;
+            let targetX = centerX;
+            let targetY = centerY;
+            // Pênalti não é reposição: a marca já está de frente para o gol
+            // daquele lado, e cobrar para o meio de campo seria absurdo.
+            if (type === GameStates.PENALTY) {
+              targetX = spawnX < centerX ? PITCH_X : PITCH_X + PITCH_WIDTH;
+              targetY = centerY + (Math.random() * 220 - 110);
+            }
 
             this.kickBallFrom(closest, targetX, targetY, 18);
           }
@@ -2947,6 +3196,13 @@ class GameScene extends Phaser.Scene {
             tx = centerX;
           }
         }
+      } else if (type === GameStates.PENALTY) {
+        // PÊNALTI: todo mundo fora da área e atrás da bola. Batedor e goleiro
+        // são os únicos que ficam — o goleiro nem passa por aqui (não está em
+        // `allPlayers`).
+        const paraOMeio = ballX < centerX ? 1 : -1;
+        tx = ballX + paraOMeio * (220 + Math.random() * 260);
+        ty = centerY + (Math.random() * 500 - 250);
       } else if (type === GameStates.GOAL_KICK) {
         // TIRO DE META: Espalhamento tático
         const kickingLeft = ballX < centerX;
@@ -3057,4 +3313,76 @@ console.assert(
     );
   })(),
   "GameScene: passe saindo fraco demais para cobrir a distância pedida",
+);
+
+// =============================================================================
+// Check: arbitragem. Nada disso aparece no console quando quebra — aparece como
+// "pênalti marcado no meio de campo" ou "ninguém é expulso nunca".
+// =============================================================================
+console.assert(
+  (() => {
+    if (typeof GK_AREA_HEIGHT === "undefined" || typeof FOUL === "undefined")
+      return true;
+    const dentro = GameScene.prototype.dentroDaArea;
+    const marca = GameScene.prototype.marcaPenalti;
+    const cY = PITCH_Y + PITCH_HEIGHT / 2;
+
+    // Cartão: quatro faltas do MESMO jogador, com CARD_EVERY = 2.
+    const gritos = [];
+    const juiz = {
+      lan: false,
+      showFloatingText: (x, y, msg) => gritos.push(msg),
+      expulsar: (e) => (e.expulso = true),
+      desenharCartoes: () => {}, // o desenho é da cena viva, não do check
+      cartaoPor: GameScene.prototype.cartaoPor,
+    };
+    const bot = { x: 0, y: 0 };
+    for (let i = 0; i < 2 * FOUL.CARD_EVERY; i++) juiz.cartaoPor(bot);
+
+    // Carrinho: amarelo na PRIMEIRA falta, sem esperar reincidência.
+    const gritosCarrinho = [];
+    const juizDoCarrinho = { ...juiz, showFloatingText: (x, y, m) => gritosCarrinho.push(m) };
+    const entrador = { x: 0, y: 0 };
+    juizDoCarrinho.cartaoPor(entrador, true);
+    // E falta comum, sozinha, NÃO dá cartão — foi o que virou chuva de amarelo.
+    const limpo = { x: 0, y: 0 };
+    juizDoCarrinho.cartaoPor(limpo);
+
+    return (
+      // Área: dentro, fora pela profundidade, fora pela largura — e o lado
+      // certo. A mesma conta erra silenciosamente se GK_AREA_WIDTH/HEIGHT
+      // trocarem de papel (uma é o vão em Y, a outra a profundidade em X).
+      dentro(PITCH_X + 100, cY, true) &&
+      !dentro(PITCH_X + GK_AREA_HEIGHT + 10, cY, true) &&
+      !dentro(PITCH_X + 100, cY + GK_AREA_WIDTH, true) &&
+      dentro(PITCH_X + PITCH_WIDTH - 100, cY, false) &&
+      !dentro(PITCH_X + PITCH_WIDTH - 100, cY, true) &&
+      // A marca cai DENTRO da área que ela serve, e há uma de cada lado.
+      dentro(marca(true).x, marca(true).y, true) &&
+      dentro(marca(false).x, marca(false).y, false) &&
+      marca(true).x < marca(false).x &&
+      // Cartão: nada na 1ª falta, amarelo na 2ª, nada na 3ª, vermelho na 4ª.
+      gritos.length === 2 &&
+      gritos[0] === "AMARELO" &&
+      gritos[1] === "VERMELHO" &&
+      bot.faltas === 2 * FOUL.CARD_EVERY &&
+      bot.expulso === true &&
+      gritosCarrinho.join() === "AMARELO" &&
+      entrador.amarelos === 1 &&
+      !limpo.amarelos &&
+      // Recomeço com time INCOMPLETO: expulsão encurta a lista e o índice fixo
+      // (`enemies[3]`) virava `undefined.setPosition` no gol seguinte. Nenhum
+      // índice pode faltar, e os quatro primeiros são postos distintos.
+      (() => {
+        const posto = GameScene.prototype.postoRecomeco;
+        const oito = [0, 1, 2, 3, 4, 5, 6, 7].map(posto);
+        const quatro = oito.slice(0, 4).map((p) => p.dx + "," + p.dy);
+        return (
+          oito.every((p) => p && Number.isFinite(p.dx) && Number.isFinite(p.dy)) &&
+          new Set(quatro).size === 4
+        );
+      })()
+    );
+  })(),
+  "GameScene: arbitragem fora do lugar (área do pênalti ou cartão)",
 );

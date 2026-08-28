@@ -147,12 +147,7 @@ class AIBrain {
 
   /** @returns {boolean} false quando o frame termina aqui. */
   static applyGuards(entity, ball, scene, delta) {
-    const states = scene.GameStates;
-    const isSetPiece =
-      states &&
-      (scene.gameState === states.THROW_IN ||
-        scene.gameState === states.CORNER_KICK ||
-        scene.gameState === states.GOAL_KICK);
+    const isSetPiece = ehBolaParada(scene.gameState);
 
     if (isSetPiece) {
       entity.customVel.set(0, 0);
@@ -1608,6 +1603,9 @@ class AIBrain {
       entity.dashTimer = TACKLE.DASH_DURATION_MS;
       entity.dashCooldown = TACKLE.DASH_COOLDOWN_MS_AI;
       entity.tackleHit = false;
+      // Bot não dá carrinho: a entrada dura é escolha do humano, e é ela que
+      // carrega cartão. Explícito para nenhum bot herdar a flag de ninguém.
+      entity.isSliding = false;
     }
 
     return AIBrain.ballInterceptPoint(entity, ctx, distToBall);

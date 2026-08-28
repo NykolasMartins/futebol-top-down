@@ -227,7 +227,11 @@ class Player extends Phaser.Physics.Arcade.Sprite {
 
     if (this.dashTimer <= 0) {
       if (this.isDashing && !this.tackleHit) {
-        this.tackleSlowTimer = Math.max(this.tackleSlowTimer, 520);
+        // Carrinho errado deixa mais tempo no chão — é o preço do alcance.
+        this.tackleSlowTimer = Math.max(
+          this.tackleSlowTimer,
+          Player.lentidaoDoErro(this),
+        );
         if (this.scene.showFloatingText)
           this.scene.showFloatingText(
             this.x,
@@ -256,15 +260,61 @@ class Player extends Phaser.Physics.Arcade.Sprite {
     this.updateSkidMarks(delta);
   }
 
+  /**
+   * Começa o bote de um boneco COMANDADO POR HUMANO — `Player` ou o `Enemy` que
+   * virou o controlado pela troca de jogador. Estático e num lugar só porque os
+   * dois arquivos tinham o mesmo bloco copiado, com 190/1050/1.38 cravados: a
+   * versão de um saía do passo do outro na primeira mexida.
+   *
+   * CARRINHO é espaço COM shift, ou seja, entrando correndo. Nenhuma tecla nova
+   * para decorar, e o gesto já é o do carrinho: vai mais longe, alcança mais
+   * bola e cobra mais fôlego, tempo de chão e cartão.
+   */
+  static iniciarBote(e) {
+    const carrinho = !!(e.keys && e.keys.shift && e.keys.shift.isDown);
+    const base = e.dashStaminaCost || STAMINA.DASH_COST;
+    const custo = base * (carrinho ? TACKLE.SLIDE_STAMINA_MULT : 1);
+    if (e.dashCooldown > 0 || e.currentStamina < custo) return false;
+
+    e.dashTimer = carrinho
+      ? TACKLE.SLIDE_DURATION_MS
+      : TACKLE.DASH_DURATION_MS;
+    e.dashCooldown = carrinho
+      ? TACKLE.SLIDE_COOLDOWN_MS
+      : TACKLE.DASH_COOLDOWN_MS_PLAYER;
+    e.isDashing = true;
+    // Única escrita da flag, e no INÍCIO do bote: bote normal nunca herda o
+    // carrinho anterior.
+    e.isSliding = carrinho;
+    e.tackleHit = false;
+    e.currentStamina -= custo;
+    e.timeSinceLastStaminaUsed = 0;
+
+    const mult = carrinho ? TACKLE.SLIDE_SPEED_MULT : TACKLE.DASH_SPEED_MULT;
+    const rad = Phaser.Math.DegToRad(e.moveAngle);
+    e.customVel.x = Math.cos(rad) * e.sprintSpeed * mult;
+    e.customVel.y = Math.sin(rad) * e.sprintSpeed * mult;
+
+    // Carrinho levanta mais terra: é o único aviso visual da entrada dura (a
+    // arte não tem animação de carrinho).
+    if (e.scene.spawnImpactDust) {
+      const puffs = carrinho ? 3 : 1;
+      for (let i = 0; i < puffs; i++)
+        e.scene.spawnImpactDust(e.x + (i - 1) * 10, e.y + (i - 1) * 6, 0xd8c08a);
+    }
+    return true;
+  }
+
+  /** Quanto tempo o boneco fica arrastando depois de errar o bote. */
+  static lentidaoDoErro(e) {
+    return e.isSliding
+      ? TACKLE.SLIDE_MISSED_SLOW_MS
+      : TACKLE.MISSED_TACKLE_SLOW_MS;
+  }
+
   handleMovement(dt, delta) {
     // Impedir que o jogador saia andando com a bola durante estados de bola parada
-    const state = this.scene.gameState;
-    const states = this.scene.GameStates;
-    const isSetPiece =
-      states &&
-      (state === states.THROW_IN ||
-        state === states.CORNER_KICK ||
-        state === states.GOAL_KICK);
+    const isSetPiece = ehBolaParada(this.scene.gameState);
 
     if (isSetPiece) {
       this.customVel.set(0, 0);
@@ -386,23 +436,7 @@ class Player extends Phaser.Physics.Arcade.Sprite {
       }
       this.previousR1State = currentR1State;
 
-      if (
-        shouldTackle &&
-        this.dashCooldown <= 0 &&
-        this.currentStamina >= this.dashStaminaCost
-      ) {
-        this.dashTimer = 190;
-        this.dashCooldown = 1050;
-        this.isDashing = true;
-        this.tackleHit = false;
-        this.currentStamina -= this.dashStaminaCost;
-        this.timeSinceLastStaminaUsed = 0;
-        let rad = Phaser.Math.DegToRad(this.moveAngle);
-        this.customVel.x = Math.cos(rad) * this.sprintSpeed * 1.38;
-        this.customVel.y = Math.sin(rad) * this.sprintSpeed * 1.38;
-        if (this.scene.spawnImpactDust)
-          this.scene.spawnImpactDust(this.x, this.y, 0xd8c08a);
-      }
+      if (shouldTackle) Player.iniciarBote(this);
     }
 
     if (!this.isDashing) {

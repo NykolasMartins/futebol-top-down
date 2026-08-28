@@ -76,6 +76,29 @@ guarda tabelas e chaveamentos em andamento. Para um mundo novo, zere
 **Aparência de NPC é determinística.** Nunca reintroduza `Math.random`/
 `GetRandom` para pele e cabelo: vem de hash do `id` em `getPlayerAppearance()`.
 
+**Falta é bote ERRADO que pega o homem, e o juiz é o anfitrião.** O ramo de
+bote limpo nunca apita. Tudo passa por `chamarFalta()` e o ponto viaja em
+`_faltaPonto` (o reposicionamento é 400ms depois, no fim do fade). Dentro da
+área é `PENALTY`, fora é `FREE_KICK` recuado até a linha da área. "É bola
+parada?" é `ehBolaParada(state)`: a tripla `THROW_IN/CORNER/GOAL_KICK` estava
+copiada em `Player`, `Enemy` e `AIBrain`, e estado novo só valia em quem fosse
+editado. **Não há impedimento e isso não é pendência** — é futsal 5v5.
+
+**Expulso sai das LISTAS, não do jogo.** `expulsar()` filtra
+`allPlayers`/`allies`/`enemies`/`playerTeam` e desliga corpo e sprite; destruir
+quebraria `lastTouch`, o replay e o colisor do `create()`, que seguem apontando
+para ele. Em LAN a expulsão não acontece (o convidado endereça por
+`lado_POSICAO` e não recebe o evento — sobraria um fantasma no campo dele).
+Por isso **quem reposiciona itera a LISTA, nunca `enemies[3]`**: o `resetMatch`
+tinha índice fixo e o primeiro gol depois de uma expulsão morria em
+`undefined.setPosition`. A fonte é `allPlayers`, a mesma que o `update()` lê.
+
+**`bot.tactic` é LIDO.** `FORMATION.SHAPES` tem uma forma por tática e
+`TacticManager.shapeOf()` é a única porta — nada de voltar a um `SHAPE` único,
+que foi o que deixou `tactic` sendo escrito pelo `GameScene` inteiro sem mudar
+um pixel. Tática desconhecida cai no 3-1; quem define é `playerTactic` /
+`enemyTactic` da cena.
+
 **IA tem UM cérebro.** `AIBrain` (FSM de `AI_STATES`) é o único lugar com
 decisão de IA de linha; `Player` e `Enemy` só delegam. Nada de reabrir
 `updateEnemyAI` com lógica própria — foi assim que o time do usuário passou meio
@@ -88,6 +111,19 @@ Quem zera velocidade zera aceleração junto. Knobs em `PLAYER_PHYSICS`.
 
 **Mouse: esquerdo é chute, direito é passe.** Um botão, uma função — clique
 curto no esquerdo NÃO vira passe.
+
+**Bote e carrinho começam num lugar só: `Player.iniciarBote()`.** Estático, e o
+`Enemy` chama o mesmo — a troca de jogador põe um `Enemy` no comando, então o
+bloco vivia copiado nos dois arquivos com `190/1050/1.38` cravados. Carrinho é
+SHIFT+ESPAÇO (entrando correndo): mais alcance, mais velocidade, mais fôlego,
+mais tempo no chão e cartão na falta. `isSliding` é escrito só ali, no INÍCIO do
+bote — bote normal nunca herda o carrinho anterior, e bot nenhum dá carrinho.
+
+**Falta é BANDA além do alcance, não raio fixo.** `distToVictim <= ballHitRange
++ FOUL.CONTACT_BAND`. Com raio fixo (52) o carrinho nunca cometia falta: ele
+alcança 62 e pegava a bola antes, sempre — o cartão de entrada dura virava regra
+morta. Amarelo sai por carrinho OU por reincidência (`FOUL.CARD_EVERY`); falta
+comum sozinha não dá cartão, senão a partida vira chuva de amarelo.
 
 **Tática sem a bola é escolha de PONTO, dentro do `think()`.** Corte de linha
 (`laneCutPoint`), infiltração (`throughRunTarget`) e hold up (`holdUpPoint`)
@@ -200,7 +236,16 @@ de interesse passa por `_offerChance()` — inclusive o piso de 3 propostas, sen
 o Bayern sonda um rating 62.
 
 **Cache do navegador engana.** Ao validar mudança de JS/CSS, force
-`Ctrl+Shift+R` — várias sessões foram perdidas depurando arquivo velho.
+`Ctrl+Shift+R` — várias sessões foram perdidas depurando arquivo velho. Por
+isso existe `GAME_VERSION` (constants.js), no canto superior direito de TODA
+tela: **bump obrigatório em toda entrega** — MAJOR virada grande, MINOR feature,
+PATCH correção. Canto mostrando número velho = cache, não regressão.
+
+**`#game-container > div` é esticado por `!important`.** A regra da camada DOM
+do Phaser (main.css) força `top/left: 0`, `width/height: 100%` em TODO div filho
+direto. Posicionar um overlay novo com `top`/`right` ali perde calado — o selo
+de versão É a camada, e quem vai para o canto é o TEXTO (`text-align` +
+`padding`).
 
 **ONLINE é a mesma LAN, com sala.** `server/salas.js` só decide QUEM está em
 qual sala; o `lobby.js` continua dono do que acontece DENTRO dela e o
@@ -261,6 +306,9 @@ avisar que o AudioContext não pôde iniciar. Ao acrescentar som, vire para
   20 cores medidas da arte real + ida/volta HSL + contraste preto/branco.
 - `GameScene.input.js`: métodos no prototype + sinal/escala/clamp do
   `curveFromDrag`.
+- `GameScene.js`: arbitragem — retângulo da área nos dois lados, a marca do
+  pênalti caindo dentro dela, e a progressão do cartão (nada, amarelo, nada,
+  vermelho + expulsão).
 - `CareerMode.js`: `playerCupStatus()` com chave falsa de 4 times — fase,
   eliminação e campeão, mais os nomes de fase de uma chave de 32. E a proposta
   de transferência: campos planos sem `undefined` e o cruzamento tier x rating.
@@ -279,7 +327,8 @@ avisar que o AudioContext não pôde iniciar. Ao acrescentar som, vire para
 - `GameScene.lansync.js`: projeção do alvo da rede (sem tempo, meio da janela,
   no teto, além do teto, entidade parada, relógio para trás).
 - `TacticManager.js`: losango, ocupação da área, giro, ruptura e `postoBase`
-  sem colisão dentro do time.
+  sem colisão dentro do time. Mais as TRÊS táticas: postos únicos em cada uma,
+  times diferentes entre elas, 2-2 com dois atrás e 4-0 em linha.
 - `EfeitosVisuais.js`: sanitização do save de efeitos.
 - `LobbyClient.js`: `urlDe` devolvendo o esquema certo (é a falha muda do
   deploy).
