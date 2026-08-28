@@ -10,7 +10,8 @@ Jogo de futebol top-down 2D single-player em **Phaser 4.2.1** (carregado via CDN
 - DOM Elements (`this.add.dom()`) para todas as telas de menu e HUD overlay
 - Persistência via `localStorage` (key: `phaser_football_career`)
 - Controles: Teclado WASD + Shift + Espaço, Mouse (clique esq=chute, dir=passe), Gamepad XInput
-- Multiplayer LAN: servidor Node sem dependência (`server/`), WebSocket na mão
+- Multiplayer LAN e ONLINE: servidor Node sem dependência (`server/`), WebSocket na mão.
+  Frontend estático (Netlify) + servidor de salas (Render), ou tudo no mesmo processo em LAN
 
 **Canvas 1000×600**, mundo maior 1400×2000 (campo 1000×1600 + arquibancadas). Câmera segue jogador com lerp.
 
@@ -42,6 +43,9 @@ JOGO_FINAL/
     │
     ├── systems/                  ← SISTEMAS TRANSVERSAIS (instanciados em window ou direto na cena)
     │   ├── UIHelper.js           ← Classe utilitária ESTÁTICA para DOM: createDOMButton/createDOMPanel/createDOMModal/createDOMNotification etc.
+    │   ├── EfeitosVisuais.js     ← Dono ÚNICO dos efeitos (CRT, grão, riscos, curvatura da UI, tremor).
+    │   │                            Estado + aplicação + persistência em localStorage. O CATALOGO gera os
+    │   │                            interruptores das DUAS telas de config (menu e pausa).
     │   ├── CareerMode.js         ← (1931 linhas) Sistema MODO CARREIRA: progressão, stats, skills, notícias, tabela, liga, dilemas, transferências, save/load localStorage
     │   ├── TacticManager.js      ← (116 linhas) Posicionamento tático: arquétipos (FIXO/WING_L/R/PIVOT) + formações (3-1 / 2-2 / 4-0), getTargetPosition()
     │   ├── AIBrain.js            ← FSM ÚNICA da IA de linha (5 estados). Player e Enemy só delegam.
@@ -60,7 +64,8 @@ JOGO_FINAL/
     │   └── Goalkeeper.js         ← (655 linhas) Goleiro com shouldParry() (score baseado em velocidade/distância/alcance), reposição inteligente, pulo, mergulho.
     │
     ├── scenes/                   ← 11 CENAS DO PHASER, fluxo abaixo:
-        ├── MenuScene.js            ← Menu principal (DOM HTML) com 3 opções: Exibição / Nova Carreira / Continuar
+        ├── MenuScene.js            ← Menu principal (DOM HTML): Exibição / Multiplayer / Nova Carreira /
+        │                              Continuar + modal EFEITOS VISUAIS
         ├── CharacterCreationScene.js ← Criação do personagem: nome, time, atributos
         ├── PreGameScene.js         ← (1117 linhas) Escalação, tática, habilidades, tela "VS"
         ├── ExhibitionMatchScene.js ← Wrapper para partida rápida sem carreira
@@ -78,12 +83,21 @@ JOGO_FINAL/
         │                              (arquétipo, nick, lanId/lanChave, quem é o local).
         ├── GameScene.lansync.js    ← Mixin: rede da partida — envio 20Hz, interpolação,
         │                              chute/gol/apito como evento. Autoridade no anfitrião.
-        └── MultiplayerScene.js     ← Multiplayer LAN: modo → lan → sala (uma cena, três telas)
+        └── MultiplayerScene.js     ← Multiplayer: modo → lan | online → sala (uma cena, quatro telas)
 
-server/                            ← SERVIDOR DE LAN (Node, ZERO dependência)
-├── lobby.js                       ← Regra da sala, sem rede. Estado puro, testável.
-├── server.js                      ← http estático + WebSocket na mão + repasse de pacotes
-└── test_lobby.js                  ← 27 asserts: `node server/test_lobby.js`
+server/                            ← SERVIDOR DE SALAS (Node, ZERO dependência)
+├── lobby.js                       ← Regra DENTRO da sala, sem rede. Estado puro, testável.
+├── salas.js                       ← QUAIS salas existem e quem está em qual: pareamento (fila 1v1),
+│                                    sala privada por código de 4 dígitos, faxina de sala vazia.
+│                                    `sala.pareamento` separa fila (começa sozinha) de sala com
+│                                    código/LAN (espera o capitão).
+├── server.js                      ← http estático + /health + WebSocket na mão + repasse por SALA
+├── package.json                   ← só para o Render (`npm start`); dependencies vazio
+├── test_lobby.js                  ← 27 asserts: `node server/test_lobby.js`
+└── test_salas.js                  ← 33 asserts: `node server/test_salas.js`
+
+netlify.toml                       ← publish na raiz, sem build; /server/* 404; cache curto em js/css
+.gitignore                         ← node_modules, logs, __pycache__, .claude/settings.local.json
 ```
 
 ---
@@ -93,6 +107,12 @@ server/                            ← SERVIDOR DE LAN (Node, ZERO dependência)
 ```
 MenuScene
   ├─ Partida Rápida ───────────► ExhibitionMatchScene ──► GameScene ──► EndGameScene ──► MenuScene
+  │
+  ├─ Multiplayer ──► MultiplayerScene ─┬─ LAN (por IP) ──────► sala ──► GameScene
+  │                                    ├─ Online: partida rápida 1v1 (servidor pareia e inicia)
+  │                                    └─ Online: criar/entrar por código ──► sala ──► GameScene
+  │
+  ├─ Efeitos Visuais (modal, não troca de cena)
   │
   └─ Nova Carreira ──► CharacterCreationScene ──► PreGameScene ──► GameScene ──► EndGameScene
                                                                       │
@@ -109,7 +129,8 @@ MenuScene
 ## 4 — Variáveis Globais Importantes
 - `window.careerMode` = instância singleton da classe CareerMode (instanciada no continue carregado / CharacterCreationScene). Passa estado de carreira entre cenas.
 - Todas as constantes são globais: `PITCH_WIDTH`, `WORLD_WIDTH`, `GameStates`, e os grupos `BALL_PHYSICS`, `PLAYER_ATTR`, `STAMINA`, `TACKLE`, `AI_BEHAVIOR`, `GOALKEEPER`, `INPUT_CONFIG`, `PASS_TYPES`, `UI_CONFIG`, `CAREER_BASE` — todos em `constants.js`.
-- Grupos novos em `constants.js`: `KIT_KEYS`, `SWAP_TUNING`, `TEAMS_DB`, `SKIN_COLORS`, `HAIR_COLORS`, `BASE_SPRITE_PATH`/`BASE_DIRS`/`BASE_FRAME_SIZE`/`BASE_RUN_FRAMES`/`BASE_KICK_FRAMES`, `KICK_ANIM_MS`, `SKID_MARK`, `CURVE_SKILL`.
+- Grupos novos em `constants.js`: `KIT_KEYS`, `SWAP_TUNING`, `TEAMS_DB`, `SKIN_COLORS`, `HAIR_COLORS`, `BASE_SPRITE_PATH`/`BASE_DIRS`/`BASE_FRAME_SIZE`/`BASE_RUN_FRAMES`/`BASE_KICK_FRAMES`/`BASE_KICK_MISSING`, `KICK_ANIM_MS`, `SKID_MARK`, `CURVE_SKILL`, `CAMERA` (zoom contextual), `PACE_SCALE` (cadência global), `DEFAULT_STATS` + `normalizeStats()` + `statWeight()` (ficha do atleta).
+- `EfeitosVisuais` é global (não é `window.x`): estado dos efeitos, lido pelo `main.js` e pelas duas telas de configuração.
 - `LEAGUES_DB`, `SOUTH_AMERICAN_POOL`, `CONTINENTAL_CUPS`, `REAL_ROSTERS` são globais de `js/data/`.
 - **O campo é HORIZONTAL** (gols esquerda/direita). `WORLD 2000x1400`, `PITCH 1600x1000`. `gkTop` = gol da ESQUERDA, `gkBottom` = da DIREITA (nomes legados da era vertical).
 - `GameScene.create()` publica `this.PITCH_X/PITCH_Y/PITCH_WIDTH/PITCH_HEIGHT/GOAL_LINE_OFFSET` — as entidades leem daí.
@@ -291,7 +312,40 @@ cd JOGO_FINAL ; python -m http.server 8000
 cd JOGO_FINAL ; npx serve .
 
 # Depois abre no browser http://localhost:8000
+
+# Opção 3: o PRÓPRIO servidor de salas (serve o jogo E hospeda a sala)
+node server/server.js        → http://<seu-ip>:8080
 ```
+
+**Multiplayer local:** quem cria roda `node server/server.js` e passa o IP que
+aparece no terminal; os outros entram por ENTRAR POR IP.
+
+---
+
+## 9b — Deploy (Netlify + Render)
+
+Repositório único, dois serviços lendo a mesma origem:
+
+| | Netlify (frontend) | Render (servidor de salas) |
+|---|---|---|
+| Base / Root Directory | raiz | `server` |
+| Build command | **vazio** (não há bundler) | vazio |
+| Publish directory | `.` | — |
+| Start command | — | `npm start` |
+
+Depois do primeiro deploy do Render, cole o host em `LobbyClient.ONLINE_HOST`
+(fim de `js/systems/LobbyClient.js`) e faça commit — **é esse commit que liga o
+online**. Sem ele o botão tenta o host da própria página do Netlify, onde não
+existe sala.
+
+Três coisas que mordem:
+- **`wss://`**: a página do Netlify é https e o navegador recusa `ws://` sem
+  mensagem nenhuma. `LobbyClient.urlDe()` já resolve o esquema pela página.
+- **Hibernação**: o plano free do Render dorme em ~15min. Aponte um monitor
+  (UptimeRobot) para `https://SEU-APP.onrender.com/health` a cada 10min. A
+  primeira partida depois de dormir leva ~50s para acordar.
+- **Build Filters** no Render (`server/**` em Included Paths): sem isso todo
+  push de frontend derruba a sala por ~1min.
 
 ---
 
@@ -725,16 +779,36 @@ O mesmo padrão vale para `this.copa` (apagado no load) e para `_worldTables`.
 
 ---
 
-## 15 — MULTIPLAYER LAN (lobby)
+## 15 — MULTIPLAYER LAN e ONLINE (lobby, salas e rede)
 
 ```
 server/
-├── lobby.js        ← REGRA da sala, sem rede. Testável com node.
-├── server.js       ← http estático + WebSocket na mão (zero dependência)
-└── test_lobby.js   ← 18 asserts: `node server/test_lobby.js`
-js/systems/LobbyClient.js   ← transporte no browser, sem regra
-js/scenes/MultiplayerScene.js ← 3 telas: modo -> lan -> sala
+├── lobby.js        ← REGRA dentro da sala, sem rede. Testável com node.
+├── salas.js        ← QUAIS salas existem (registro + pareamento + código). Também puro.
+├── server.js       ← http estático + /health + WebSocket na mão (zero dependência)
+├── test_lobby.js   ← 27 asserts: `node server/test_lobby.js`
+└── test_salas.js   ← 33 asserts: `node server/test_salas.js`
+js/systems/LobbyClient.js     ← transporte no browser, sem regra
+js/scenes/MultiplayerScene.js ← 4 telas: modo -> lan | online -> sala
 ```
+
+**Os quatro modos divergem só na PRIMEIRA mensagem** que o cliente manda no
+`onopen`; daí em diante o protocolo é idêntico, inclusive a `GameScene` (que
+não tem nenhum `if (isOnline)` — ela lê `data.lan` e pronto):
+
+| modo | mensagem | quem inicia a partida |
+|---|---|---|
+| LAN | `entrar` (sala `PADRAO`) | capitão, no lobby |
+| Online — fila 1v1 | `procurar` | o servidor, quando enche |
+| Online — criar sala | `criar` → devolve código de 4 dígitos | capitão, no lobby |
+| Online — entrar | `entrar_codigo` | capitão, no lobby |
+
+`sala.pareamento` é o que separa fila de sala privada. Código inexistente
+devolve `sala_nao_encontrada` em vez de criar sala vazia — quem digitou errado
+precisa saber, senão espera para sempre num lugar onde ninguém chega.
+
+**Todo broadcast é recortado por sala** (`S.colegas`). Sem isso duas partidas
+online trocam posição de bola entre si, e o sintoma não parece de servidor.
 
 **Como jogar:** o anfitrião roda `node server/server.js` e passa o IP que o
 terminal imprime. Todos abrem `http://<ip>:8080`, entram em MULTIPLAYER → LAN.
@@ -788,5 +862,38 @@ todo frame (fator 0.28 corrigido pelo delta); acima de 260px crava, para kickoff
 não deslizar. **Fim de jogo** é ordem do anfitrião (`{fim:{...}}`); a
 `EndGameScene` da LAN volta para a sala REUSANDO o socket.
 
-**Ainda não feito:** predição e reconciliação (o boneco local não prevê o
-próprio movimento sob lag); fora da LAN o deslize de 20Hz vai aparecer.
+**Lag e predição.** O convidado SEMPRE moveu o próprio boneco com input local
+(`applyLanPacket` nunca aplica em `this.player`, e o `update()` dele roda) — não
+há input lag no próprio corpo, e não há o que reconciliar. O que atrasava era
+todo o resto: o alvo perseguido era a última posição RECEBIDA (50ms de tick +
+viagem). `GameScene.lanPontoPrevisto()` projeta esse alvo com a velocidade que
+já viaja no pacote, com teto de 150ms — dead reckoning, não simulação (sem
+atrito, sem colisão). Passado o teto congela: pacote perdido não vira invenção.
+
+**Ainda não feito:** posse e chute do convidado continuam custando um round-trip
+(são decisão do anfitrião). Prever isso localmente é possível, mas é a
+simulação paralela que já deixou a bola presa no meio de campo aqui.
+
+**Convidado e replay:** ele toca o PRÓPRIO buffer no gol (`lanComemorarGol`),
+com `applyLanPacket` ignorando posição durante o replay e `stopReplay`
+desviando para `lanPararReplay` — que não chama `resetMatch`, porque quem repõe
+a bola é o anfitrião.
+
+---
+
+## 16 — ESTADO ATUAL E PRÓXIMOS PASSOS
+
+**Funciona:** carreira completa, exibição, treino, pênaltis, LAN, online (fila
+1v1 e sala por código), efeitos configuráveis, deploy Netlify + Render.
+
+**Pendências conhecidas:**
+- **Saída de bola no convidado** — relatado, ainda não reproduzido. O
+  `gameState` e as posições são sincronizados; falta o sintoma exato (bola
+  some? jogadores não reposicionam? tela trava?).
+- **Arte:** `shooting/north` só tem frames 000, 003 e 004. `BASE_KICK_MISSING`
+  cobre o buraco com o frame 000 e evita o 404.
+- **Check de paleta** vira aviso, não asserção — ele valida a arte de origem.
+- **Sem áudio:** zero `load.audio`; `audio: { noAudio: true }` no `main.js`.
+- **`TACTICS` (3-1 / 2-2 / 4-0) é atribuído e nunca lido** — a formação é
+  sempre o losango do `FORMATION.SHAPE`.
+- **Sem arbitragem:** não existe falta, cartão nem impedimento.

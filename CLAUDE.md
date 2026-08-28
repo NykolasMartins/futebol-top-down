@@ -202,6 +202,60 @@ o Bayern sonda um rating 62.
 **Cache do navegador engana.** Ao validar mudança de JS/CSS, force
 `Ctrl+Shift+R` — várias sessões foram perdidas depurando arquivo velho.
 
+**ONLINE é a mesma LAN, com sala.** `server/salas.js` só decide QUEM está em
+qual sala; o `lobby.js` continua dono do que acontece DENTRO dela e o
+`lansync.js` continua o único dono da sincronização. Todo broadcast (estado e
+pacote de partida) é recortado por `S.colegas()` — sem isso duas partidas
+online trocam bola entre si e o sintoma não parece de servidor.
+
+**`sala.pareamento` separa fila de sala privada.** Só a fila começa sozinha ao
+encher (não há lobby para clicar). Sala com código e sala LAN esperam o capitão
+— iniciar sozinho ali arranca o lobby da mão de quem convidou.
+
+**O modo é a PRIMEIRA mensagem, não um segundo protocolo.** `entrar` (LAN),
+`procurar` (fila), `criar` e `entrar_codigo` divergem só no `onopen` do
+`LobbyClient`. Daí em diante tudo é idêntico — inclusive a `GameScene`, que não
+tem nenhum `if (isOnline)`: ela lê `data.lan` e pronto.
+
+**Esquema do socket acompanha a página.** `LobbyClient.urlDe()` devolve `wss://`
+em página https. Navegador recusa `ws://` em página segura e a falha vem MUDA —
+o socket nem tenta abrir. É o que separa "funciona no localhost" de "funciona no
+Netlify + Render".
+
+**Nome de time é CHAVE do `TEAMS_DB`, nunca texto em maiúscula.**
+`buildKitAtlas` cai em `|| TEAMS_DB.Flamengo`, então nome errado não quebra:
+veste os dois times de vermelho e ninguém liga o sintoma à causa.
+
+**Posicionar gente usa `postoBase()`, jogar usa `getTargetPosition()`.** O
+tático depende do estado do instante; no instante do spawn a zona do pivô conta
+como vazia, a rotação promove um ala e dois bonecos nascem colados (medido:
+10px). O `applySpacing` não salva — ele mede posições atuais, não os alvos.
+
+**Alvo da rede é PROJETADO, não perseguido cru.** `lanPontoPrevisto` soma
+`velocidade × tempo desde o pacote`, com teto de 150ms. Não é simulação (sem
+atrito, sem colisão): é o que tira o atraso de 50ms de tick + viagem. Passado o
+teto congela — pacote perdido não pode virar invenção.
+
+**Convidado não reseta partida.** `stopReplay` dele desvia para
+`lanPararReplay`: quem repõe a bola no meio é o anfitrião. E durante o replay o
+`applyLanPacket` ignora posição, senão o pacote ao vivo sobrescreve o quadro
+gravado.
+
+**Efeito visual tem UM dono.** `EfeitosVisuais` guarda, aplica e persiste; o
+`CATALOGO` gera os interruptores das DUAS telas de configuração. `shake` solto
+volta a sacudir a tela de quem desligou — use `EfeitosVisuais.tremer()`.
+
+**O passe tem de CHEGAR.** A força sai da física em `passForceFor()`
+(`v0 = d*k + chegada`, com teto), não de palpite. Já houve o caso de TODO passe
+do jogo morrer antes do alvo — um toque de 200px partia a 246px/s e parava aos
+96px. `PASS_SPEED_MAX / k` tem de cobrir `PASS_RANGE_MAX`, e o check no
+`GameScene.js` trava essa relação.
+
+**Não há áudio no projeto.** `audio: { noAudio: true }` no `main.js` de
+propósito: zero `load.audio`, e o gerente do Phaser só existia para o Chrome
+avisar que o AudioContext não pôde iniciar. Ao acrescentar som, vire para
+`false` e destrave no primeiro input, nunca no `create()`.
+
 ## Checks existentes (rodam no boot, gritam no console)
 - `GameScene.render.js`: métodos no prototype + `colorMaterial` classificando
   20 cores medidas da arte real + ida/volta HSL + contraste preto/branco.
@@ -219,3 +273,27 @@ o Bayern sonda um rating 62.
   descanso mínimo, turno/returno, e o cenário "jogou quarta, não pode sexta".
   Mais um: o mata-mata roda até o campeão, com as `cupWindows` todas resolvidas.
 - `test_input.js` e `test_replay.js` na raiz (`node test_*.js`).
+- `server/test_lobby.js` (27 asserts) e `server/test_salas.js` (33): regra da
+  sala e registro de salas, sem abrir porta nenhuma. `npm test` dentro de
+  `server/` roda os dois.
+- `GameScene.lansync.js`: projeção do alvo da rede (sem tempo, meio da janela,
+  no teto, além do teto, entidade parada, relógio para trás).
+- `TacticManager.js`: losango, ocupação da área, giro, ruptura e `postoBase`
+  sem colisão dentro do time.
+- `EfeitosVisuais.js`: sanitização do save de efeitos.
+- `LobbyClient.js`: `urlDe` devolvendo o esquema certo (é a falha muda do
+  deploy).
+- `main.js`: mixins de `GameScene` presentes — pega mixin VELHO servido junto
+  de um `GameScene.js` novo, que o check de dentro do próprio mixin não pega.
+
+## Onde as coisas moram (mapa curto)
+
+- **Partida:** `GameScene.js` + mixins `render` / `input` / `replay` / `hud` /
+  `lan` / `lansync`. Mixin carrega DEPOIS do `GameScene.js`.
+- **IA:** `AIBrain.js` (FSM), `TacticManager.js` (onde ficar).
+- **Rede:** `LobbyClient.js` (cliente), `server/server.js` (transporte + rotas),
+  `server/lobby.js` (regra da sala), `server/salas.js` (quais salas existem).
+- **Carreira:** `CareerMode.js`, `SeasonManager.js`, `MatchSimulator.js`,
+  `CalendarManager.js`.
+- **Ajuste de jogo:** quase tudo em `constants.js`. Antes de mudar um número,
+  confirme que quem usa realmente LÊ a constante.
