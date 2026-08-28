@@ -148,7 +148,18 @@ class MultiplayerScene extends Phaser.Scene {
     const meu = this.lobby.eu;
     const meuLado = meu && meu.lado ? meu.lado : "esq";
     const outro = meuLado === "esq" ? "dir" : "esq";
-    const uniforme = (lado) => pacote.times[lado].uniforme || (lado === "esq" ? "FLAMENGO" : "PALMEIRAS");
+    // O fallback tem de ser CHAVE do TEAMS_DB, não o nome em maiúsculas: o
+    // `buildKitAtlas` faz `TEAMS_DB[nome] || TEAMS_DB.Flamengo`, então
+    // "FLAMENGO"/"PALMEIRAS" caíam os DOIS no Flamengo e os times entravam em
+    // campo com o mesmo uniforme. Na partida rápida não há lobby para escolher
+    // kit, então este caminho é o normal, não a exceção.
+    const PADRAO_ESQ = "Flamengo";
+    const PADRAO_DIR = "Palmeiras";
+    const valido = (nome) =>
+      nome && typeof TEAMS_DB !== "undefined" && TEAMS_DB[nome] ? nome : null;
+    const uniforme = (lado) =>
+      valido(pacote.times[lado].uniforme) ||
+      (lado === "esq" ? PADRAO_ESQ : PADRAO_DIR);
 
     // Ordem importa: trocar de cena PRIMEIRO. Fechar o socket antes disparava
     // `aoFechar`, que devolvia a tela para o menu LAN e engolia a transição —

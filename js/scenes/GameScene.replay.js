@@ -137,6 +137,12 @@ Object.assign(GameScene.prototype, {
   },
 
   stopReplay() {
+    // Convidado de LAN/online: o fim do replay NÃO reseta a partida. Quem
+    // repõe a bola é o anfitrião, e resetar aqui brigaria com o pacote dele.
+    if (this.lan && !this.souHostLan && this.lanPararReplay) {
+      return this.lanPararReplay();
+    }
+
     this.isReplaying = false;
     this.replayUI.setAlpha(0);
     this.physics.world.resume();
