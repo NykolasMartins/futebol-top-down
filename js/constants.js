@@ -23,9 +23,64 @@ const GameStates = {
   THROW_IN: "THROW_IN",
   CORNER_KICK: "CORNER_KICK",
   GOAL_KICK: "GOAL_KICK",
+  FREE_KICK: "FREE_KICK",
+  PENALTY: "PENALTY",
   CELEBRATION: "CELEBRATION",
   PAUSED: "PAUSED",
 };
+
+// "É bola parada?" num lugar só. A pergunta estava copiada em Player, Enemy e
+// AIBrain — estado novo (a falta) só valia em quem lembrasse de editar os três.
+// Nome diferente de `isSetPiece` de propósito: esse é o nome da variável LOCAL
+// nas três funções, e a global ficaria na sombra dela.
+const ehBolaParada = (state) =>
+  state === GameStates.THROW_IN ||
+  state === GameStates.CORNER_KICK ||
+  state === GameStates.GOAL_KICK ||
+  state === GameStates.FREE_KICK ||
+  state === GameStates.PENALTY;
+
+// =============================================================================
+// ARBITRAGEM — FALTA
+// =============================================================================
+const FOUL = {
+  // Faixa de falta: quanto ALÉM do próprio alcance de bola o bote ainda pega o
+  // homem. É banda, não raio fixo, porque o alcance muda (carrinho alcança 62,
+  // bote 36, e o atributo `defending` mexe nos dois): com raio fixo em 52 o
+  // carrinho NUNCA cometia falta — ele alcançava a bola antes, sempre, e o
+  // cartão de entrada dura ficava sendo regra morta.
+  CONTACT_BAND: 16,
+  // O árbitro deixa correr. Sem isso todo dash mal dado parava o jogo — a IA
+  // dá bote o tempo todo e não sobrava partida.
+  CHANCE: 0.35,
+  // Carrinho errado quase sempre é falta: é entrada com o corpo, não disputa.
+  SLIDE_CHANCE: 0.8,
+  // Cartão por REINCIDÊNCIA, não por sorteio: a cada N faltas do MESMO jogador
+  // sai um amarelo, e o segundo amarelo é vermelho. Previsível de propósito —
+  // cartão que o jogador não consegue antecipar não muda como ele joga.
+  // Em 2 o jogo virava chuva de amarelo, porque falta é comum aqui.
+  CARD_EVERY: 3,
+};
+
+// Tira do cartão desenhada EM CAMPO, acima do nome. A cor mora aqui porque
+// quem desenha é o Phaser (0xRRGGBB); o lado DOM do placar lê `--cartao-*` do
+// ui.css. Uma fonte por domínio — não há como o Phaser ler variável CSS.
+const CARD_HUD = {
+  W: 7,
+  H: 15,
+  GAP: 3,
+  Y_OFFSET: 50, // acima do rótulo de nome, que fica em -34
+  YELLOW: 0xffd400,
+};
+
+// =============================================================================
+// VERSÃO
+// =============================================================================
+// MAJOR: virada grande no jogo. MINOR: feature nova. PATCH: correção ou ajuste.
+// Aparece no canto superior direito em TODA tela. Existe por um motivo prático:
+// o navegador serve JS velho calado, e "a versão da tela não é a que subi" é a
+// única forma barata de separar cache de regressão.
+const GAME_VERSION = "1.4.0";
 
 // =============================================================================
 // FÍSICA DA BOLA
@@ -131,12 +186,14 @@ const PLAYER_ATTR = {
 // CUSTOS E RECUPERAÇÃO DE ESTAMINA
 // =============================================================================
 const STAMINA = {
-  // Recarga PELA METADE. Com o dobro de capacidade, encher do zero passou de
-  // ~7s para ~28s: correr o tempo todo agora custa a partida inteira.
-  RECOVERY_RATE_PER_SEC: 7.5,
-  RECOVERY_AI_PER_SEC: 10,
-  RECOVERY_DELAY_MS: 2000,
-  DEPLETED_RECOVERY_DELAY_MS: 2000,
+  // Recarga RÁPIDA, e é escolha de ritmo, não de simulação: com 7.5/s encher do
+  // zero levava ~28s e a partida virava caminhada. Em ~22/s o fôlego volta em
+  // ~10s e o sprint é decisão de momento, não orçamento da partida inteira.
+  // A pausa antes de começar a recarregar é o que ainda pune segurar o sprint.
+  RECOVERY_RATE_PER_SEC: 18,
+  RECOVERY_AI_PER_SEC: 24,
+  RECOVERY_DELAY_MS: 700,
+  DEPLETED_RECOVERY_DELAY_MS: 1200,
   DASH_COST: 25,
   KICK_COST: 10,
   PASS_COST: 5,
@@ -169,6 +226,16 @@ const TACKLE = {
   // cravado no GameScene enquanto STEAL_TRIGGER_DIST (que é o gatilho da IA,
   // outra coisa) ficava aqui sem ninguém ler.
   BALL_HIT_RANGE: 36,
+  // CARRINHO: o bote comprometido. Vai mais longe, corre mais e alcança mais
+  // bola — e paga por isso: gasta mais fôlego, deixa mais tempo no chão quando
+  // erra e a falta dele é cartão na hora. Sai com SHIFT + ESPAÇO (correndo).
+  // Reusa a máquina do dash inteira; só troca os números e liga `isSliding`.
+  SLIDE_DURATION_MS: 340,
+  SLIDE_COOLDOWN_MS: 1800,
+  SLIDE_SPEED_MULT: 1.85,
+  SLIDE_BALL_HIT_RANGE: 62,
+  SLIDE_STAMINA_MULT: 1.6,
+  SLIDE_MISSED_SLOW_MS: 900,
   TACKLE_IMPULSE: 0.4,
   INVULN_AFTER_PICKUP_MS: 1500,
   BALL_STEAL_COOLDOWN_MS: 500,
@@ -723,8 +790,12 @@ console.assert(
       // é de graça e não existe decisão nenhuma em usá-lo.
       STAMINA.SPRINT_PER_SEC > STAMINA.RECOVERY_RATE_PER_SEC &&
       STAMINA.DASH_PER_SEC > STAMINA.RECOVERY_AI_PER_SEC &&
-      // Recarregar dói mais que gastar: é o que pune quem corre o tempo todo.
-      segundosDeRecarga > segundosDeSprint * 2 &&
+      // Encher ainda demora mais do que esvaziar — mas só um pouco. O fator
+      // era 2x, escolha de ritmo de quando a recarga era lenta de propósito;
+      // hoje o fôlego volta rápido por decisão de jogo, e quem segura o pique
+      // é a PAUSA antes de recarregar (RECOVERY_DELAY_MS), não o gotejamento.
+      segundosDeRecarga > segundosDeSprint &&
+      STAMINA.RECOVERY_DELAY_MS >= 400 &&
       // Um pique útil, mas não infinito.
       segundosDeSprint >= 4 &&
       segundosDeSprint <= 12 &&

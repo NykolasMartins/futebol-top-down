@@ -31,6 +31,10 @@
   --pui-red: #cc2233;
   --pui-red-bright: #ff4455;
   --pui-orange: #ff8800;
+  /* Cartões. O lado Phaser (tira em campo) lê CARD_HUD.YELLOW em constants.js —
+     shader/canvas não enxerga variável CSS. Uma fonte por domínio. */
+  --cartao-amarelo: #ffd400;
+  --cartao-vermelho: #e01b24;
   --pui-text: #c8e8c8;
   --pui-text-muted: #3a5a3a;
   --pui-font: "Press Start 2P", "Silkscreen", monospace;
@@ -2354,4 +2358,40 @@
   height: 32px;
   font-size: 6px;
   padding: 0 14px;
+}
+
+/* =============================================================================
+   SELO DE VERSÃO + CARTÕES NO PLACAR
+   Vivem dentro do #game-container e FORA de .pui-root, como o resto do HUD:
+   cada classe declara a fonte em vez de herdar do reset.
+   ============================================================================= */
+/* Nada de `top`/`right` aqui: `main.css` estica TODO div filho direto do
+   #game-container para a tela inteira com `!important` (é a regra da camada DOM
+   do Phaser), e um `right: 8px` perdia calado. Então o selo É a camada, e quem
+   vai para o canto é o TEXTO, por alinhamento e padding. */
+.app-version {
+  pointer-events: none; /* nunca rouba clique de botão de menu */
+  text-align: right;
+  padding: 6px 10px 0 0;
+  font-family: var(--pui-font);
+  font-size: 6px;
+  letter-spacing: 1px;
+  color: var(--pui-text-muted);
+  text-shadow: 1px 1px 0 #000;
+}
+
+/* Uma tira vermelha em pé por expulso, do lado do time que ficou com menos
+   gente. Fica no MESMO cartão do placar para ler junto com o gol. */
+.hud-reds {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  min-width: 9px; /* o placar não pula de largura quando o primeiro sai */
+}
+
+.hud-red {
+  width: 7px;
+  height: 15px;
+  background: var(--cartao-vermelho);
+  border: 1px solid #000;
 }
