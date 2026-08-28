@@ -1033,7 +1033,9 @@ class GameScene extends Phaser.Scene {
 
       // Suavização da rede: persegue os alvos que chegaram a 20Hz. Fica ANTES
       // das colisões para que elas vejam a posição já deslizada deste frame.
-      if (this.lan) this.lanInterpolar(delta);
+      // Durante o REPLAY não: quem manda nas posições é o buffer gravado, e
+      // deslizar rumo ao pacote ao vivo embaralharia a jogada repetida.
+      if (this.lan && !this.isReplaying) this.lanInterpolar(delta);
 
       this.checkCollisions();
       // Regras que REPOSICIONAM a bola (lateral, escanteio, tiro de meta) são

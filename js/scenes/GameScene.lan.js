@@ -125,11 +125,14 @@ Object.assign(GameScene.prototype, {
    */
   repositionLanTeams() {
     const tm = this.tacticManager;
-    if (!tm || typeof tm.getTargetPosition !== "function") return;
+    if (!tm || typeof tm.postoBase !== "function") return;
 
     [this.player, ...this.allies, ...this.enemies].forEach((entidade) => {
       if (!entidade || !entidade.active) return;
-      const alvo = tm.getTargetPosition(entidade);
+      // Posto BASE, não o tático: o tático depende do estado do instante, e
+      // aqui todo mundo ainda está no lugar do spawn — a zona do pivô conta
+      // como vazia, a rotação promove um ala e dois bonecos nascem colados.
+      const alvo = tm.postoBase(entidade);
       if (!alvo) return;
       entidade.setPosition(alvo.x, alvo.y);
       if (entidade.body && entidade.body.reset) entidade.body.reset(alvo.x, alvo.y);

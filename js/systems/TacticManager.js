@@ -180,6 +180,27 @@ class TacticManager {
   }
 
   /**
+   * Posto BASE do arquétipo: só a forma, sem bola, sem posse e sem giro.
+   *
+   * É o que serve para POSICIONAR gente (saída de bola, escalação da LAN), e
+   * não o `getTargetPosition`: aquele depende do estado do instante, e no
+   * instante em que todo mundo ainda está no lugar do spawn a zona do pivô
+   * conta como vazia — aí a rotação promove um ala a pivô e os dois nascem em
+   * cima um do outro (medido: 10px de distância).
+   */
+  postoBase(bot) {
+    const forma = FORMATION.SHAPE[bot.archetype];
+    if (!forma) return null;
+    const pX = this.scene.PITCH_X || 200;
+    const pY = this.scene.PITCH_Y || 200;
+    const pW = this.scene.PITCH_WIDTH || 1600;
+    const pH = this.scene.PITCH_HEIGHT || 1000;
+    const attackDir = this.getAttackDir(bot);
+    const depth = attackDir > 0 ? forma.depth : 1 - forma.depth;
+    return this.clampCourt(pX + depth * pW, pY + forma.lane * pH);
+  }
+
+  /**
    * Posto do bot: home point do arquétipo, deslizado pela posse e pela bola.
    * A versão anterior colava ala e pivô no `ball.x` — daí o time inteiro correr
    * atrás da bola em vez de manter forma. Aqui a bola só DESLOCA o losango.
@@ -359,6 +380,40 @@ console.assert(
         return (
           tm.rotatedShapeKey(c.allPlayers[0]) === ARCHETYPES.PIVOT &&
           tm.rotatedShapeKey(c.allPlayers[1]) === ARCHETYPES.WING_R
+        );
+      })() &&
+      // Posto BASE: um lugar por arquétipo, nos DOIS times, sem ninguém em cima
+      // de ninguém. É o que a escalação da LAN usa para posicionar — com o
+      // posto tático, a rotação punha dois bonecos no mesmo ponto no spawn.
+      (() => {
+        const c = cena(1000, 700, null);
+        const tm = new TacticManager(c);
+        // Unicidade DENTRO do time. Entre times não vale: o posto do pivô de
+        // um é o posto do fixo do outro, espelhado — e isso é a formação
+        // correta, não colisão.
+        const postosDo = (meuTime) =>
+          Object.keys(FORMATION.SHAPE).map((arq) => {
+            const p = tm.postoBase({ archetype: arq, isPlayerTeam: meuTime });
+            return Math.round(p.x) + "," + Math.round(p.y);
+          });
+        const meus = postosDo(true);
+        const deles = postosDo(false);
+        return (
+          new Set(meus).size === 4 && // ninguém divide posto com companheiro
+          new Set(deles).size === 4 &&
+          // E o posto base NÃO se mexe com a bola: é a forma pura.
+          (() => {
+            const c2 = cena(200, 250, { isPlayerTeam: true });
+            const outro = new TacticManager(c2).postoBase({
+              archetype: ARCHETYPES.PIVOT,
+              isPlayerTeam: true,
+            });
+            const antes = tm.postoBase({
+              archetype: ARCHETYPES.PIVOT,
+              isPlayerTeam: true,
+            });
+            return outro.x === antes.x && outro.y === antes.y;
+          })()
         );
       })() &&
       // Relógio: fora dos segundos finais o placar não muda nada.

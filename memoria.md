@@ -12,6 +12,60 @@ Formato:
 
 ---
 
+## 2026-08-22 — Uniforme igual, spawn colado e replay sem convidado
+- **Aprendizado:** `buildKitAtlas` faz `TEAMS_DB[nome] || TEAMS_DB.Flamengo`, então nome errado **não quebra** — veste os dois times de vermelho. O `abrirPartida` mandava `"FLAMENGO"`/`"PALMEIRAS"` em maiúsculas e as chaves são `Flamengo`/`Palmeiras`. Fallback silencioso é pior que erro: ninguém liga o sintoma à causa.
+- **Aprendizado:** posicionar gente com `getTargetPosition()` não funciona. Ele depende do estado do instante, e no instante do spawn a zona do pivô conta como vazia — a rotação de futsal promove um ala e dois do mesmo time recebem o mesmo posto (medido: 10px de distância). `applySpacing` não salva porque mede posições ATUAIS, não os alvos calculados. Nasceu `postoBase()`: só a forma, sem bola, posse nem giro.
+- **Aprendizado:** o convidado nunca via replay — `lanComemorarGol` só comemorava. E como o anfitrião move os bonecos dele para as posições gravadas durante o replay, isso viajava no pacote: o convidado via a jogada repetida SEM moldura, só bonecos saltando. Agora ele toca o próprio buffer, com `applyLanPacket` ignorando posição durante o replay e `stopReplay` desviando para `lanPararReplay` (sem `resetMatch` — quem repõe a bola é o anfitrião).
+- **Onde:** `MultiplayerScene.abrirPartida`, `TacticManager.postoBase`, `GameScene.lan.repositionLanTeams`, `GameScene.lansync.lanComemorarGol/lanPararReplay`.
+
+## 2026-08-22 — Sala privada por código, e o que separa fila de convite
+- **Decisão:** `sala.pareamento` distingue os dois. Só a fila começa sozinha ao encher (não há lobby para clicar); sala com código e sala LAN esperam o capitão. Sem isso a sala privada arrancava o lobby da mão do anfitrião no instante em que o amigo entrava — o mesmo estrago que o check já pegava para a LAN.
+- **Decisão:** `procurar()` ignora salas privadas — quem entra na fila não pode roubar a vaga do amigo a caminho. E código inexistente devolve `sala_nao_encontrada` em vez de criar sala vazia: quem digitou errado precisa saber, senão espera para sempre num lugar onde ninguém vai chegar.
+- **Decisão:** código de 4 DÍGITOS, não alfanumérico. Some a dúvida entre O/0 e I/1 ao ditar por voz; 10.000 combinações bastam porque a sala morre quando esvazia.
+- **Aprendizado:** a sala com código é o lobby da LAN pela internet. Reusar `telaSala()` inteira evitou um segundo fluxo de sala — entre os quatro modos o que muda é só a PRIMEIRA mensagem no `onopen`.
+- **Onde:** `server/salas.js`, `server/server.js` (`criar`/`entrar_codigo`), `LobbyClient.conectar({modo})`, `MultiplayerScene.telaOnline`.
+
+## 2026-08-21 — Online é a LAN com registro de salas (e o recorte que ninguém vê)
+- **Decisão:** NÃO usar socket.io. O modelo que o online precisava (client-authoritative, host simula, servidor repassa) já existia inteiro na LAN; a lacuna era só "quais salas existem". Socket.io custaria reescrever o `LobbyClient`, manter dois protocolos, e mataria o "copiar a pasta e rodar" do LAN.
+- **Aprendizado CRÍTICO:** com várias salas, `clientes.forEach` no relay vaza pacote entre partidas. Duas partidas online trocariam posição de bola entre si, e o sintoma (bola teleportando) não parece problema de servidor. Todo broadcast passou a ser recortado por `S.colegas()`.
+- **Aprendizado:** navegador recusa `ws://` em página `https://` e a falha é MUDA — o socket nem tenta abrir. `LobbyClient.urlDe()` resolve o esquema pela página; é o que separa "funciona no localhost" de "funciona no Netlify + Render".
+- **Onde:** `server/salas.js`, `server/server.js`, `js/systems/LobbyClient.js`.
+
+## 2026-08-21 — Dead reckoning: o convidado já previa o próprio boneco
+- **Aprendizado:** o pedido era "client-side prediction para o convidado", mas isso já existia — `applyLanPacket` nunca aplica em `this.player` e o `update()` local dele roda. Não havia input lag no próprio corpo, nem o que reconciliar. O tick também já era 50ms, não por frame. Medir antes de implementar economizou o trabalho inteiro.
+- **O que realmente faltava:** o alvo perseguido era a última posição RECEBIDA. Com 150ms de idade de pacote, uma bola a 700px/s aparecia 105px atrás. `lanPontoPrevisto` projeta com a velocidade que JÁ viajava no pacote (e só era usada para escolher animação).
+- **O teto de 150ms é o que impede virar invenção:** pacote perdido congela o alvo em vez de seguir em linha reta. Medido: com 1,2s de silêncio, a projeção para no mesmo ponto.
+- **Onde:** `GameScene.lansync.js` (`lanPontoPrevisto`, `aplicarEntidade`, `lanInterpolar`).
+
+## 2026-08-20 — Deploy: o que quebra ao separar frontend e backend
+- **Aprendizado:** no Render sobe só `server/`, sem `index.html` — `GET /` cairia no 404 do servidor de arquivos e o monitor marcaria queda com o serviço de pé. Daí a rota `/health` própria.
+- **Aprendizado:** o fallback da porta continua 8080 e NÃO 8000, porque é o mesmo número de `LobbyClient.PORTA` — é por ele que a LAN descobre a sala sozinha. Mudar só um dos dois quebraria o CRIAR SALA sem erro visível.
+- **Onde:** `server/server.js`, `server/package.json`, `netlify.toml`, `.gitignore`.
+
+## 2026-08-20 — Efeitos visuais: quatro interruptores viraram um
+- **Decisão:** `EfeitosVisuais` é o dono único (CRT, grão, riscos, curvatura da UI, tremor). Eles moravam em quatro lugares que ninguém mantinha em sincronia, incluindo 7 chamadas soltas de `cameras.main.shake` — qualquer uma continuaria sacudindo a tela de quem desligou.
+- **Aprendizado:** grão e riscos somem com `display:none`, não `opacity:0` — com opacidade zero a animação continua rodando e repintando, que é exatamente o custo que se quis cortar.
+- **Aprendizado:** o `main.js` chama `EfeitosVisuais.aplicarNaCena` no lugar de `aplicarCrt`; o segundo reacenderia o CRT de quem o desligou a cada troca de cena. E ao desligar são removidos TODOS os passes, porque a lista já empilhou filtro repetido neste projeto.
+- **Onde:** `js/systems/EfeitosVisuais.js`, `main.js`, `MenuScene`, `GameScene.hud.js`, `css/main.css`.
+
+## 2026-08-20 — Áudio, e o check de paleta que gritava errado
+- **Decisão:** `audio: { noAudio: true }` no `main.js`. O projeto não carrega NENHUM som; o gerente do Phaser só existia para o Chrome avisar que o AudioContext não pôde iniciar. Quando entrar som: virar para `false` e destravar no primeiro input, nunca no `create()`.
+- **Aprendizado:** `console.assert` NÃO interrompe script em navegador nenhum. O "Assertion failed" da paleta não quebrava render loop — mas assustava, e pior: **acusava errado**. As expectativas eram de uma paleta ANTIGA (magenta como `shirt1`, um material `logo` que não existe mais na tabela, amostras de cabelo de antes do giro para 264°). O classificador estava certo o tempo todo.
+- **Regra que ficou:** check compara com a PRÓPRIA tabela (cada cor-chave se reconhece; cinza fica fora do swap), nunca com valores copiados à mão — que foi o que apodreceu. Testado sabotando a tabela: com duas cores coladas ele avisa; com `SAT_MIN` frouxo também.
+- **Onde:** `js/main.js`, `GameScene.render.js`, `constants.js` (`BASE_KICK_MISSING` para os frames que a arte não exportou).
+
+## 2026-08-19 — O passe morria antes de chegar (e a constante era decoração)
+- **Aprendizado medido:** TODO passe do jogo morria no caminho. `kickBallFrom` RECALCULAVA a força por cima (`clamp(dist*0.025, 6, 12)`), então `AI_BEHAVIOR.PASS_FORCE_*` nunca valeu nada. Um toque de 200px partia a 246px/s e parava aos 96px.
+- **Decisão:** a força sai da física — `v0 = d*k + chegada`, e o teto de tempo, com `k` derivado do `FRICTION_GROUND`. Com teto rígido de velocidade, o atrito teve de baixar para 0.978: com 0.958 o teto de 800px/s só entregava 311px e nenhum passe médio chegava.
+- **Regra que ficou:** `PASS_SPEED_MAX / k` tem de cobrir `PASS_RANGE_MAX`. É a relação que quebra calada quando se aperta o teto ou o atrito, e o check no `GameScene.js` a trava.
+- **Onde:** `GameScene.passForceFor/passTravelTime`, `constants.js` (`BALL_PHYSICS`), `AIBrain.resolveCharge`.
+
+## 2026-08-19 — Estamina, ritmo, e o humano que ignorava o próprio atributo
+- **Aprendizado:** o bloco `STAMINA` inteiro e os `*_STAMINA_*` do `PLAYER_ATTR` eram decoração — 25 pontos de leitura estavam cravados nas entidades. Dobrar a capacidade na constante não teria mudado nada no jogo.
+- **Bug achado ao ligar:** o `Player` chamava `applyAttributes()` na linha 81 e **sobrescrevia o resultado** na linha 99 (`maxStamina = 100`). Com os valores antigos a diferença era 90 vs 100 e ninguém via; com os novos seria 180 vs 100.
+- **Bug achado pelo check:** a fórmula `COEF + (atributo-50)*VAR` chega a ZERO (e a negativo na IA) com atributo baixo, e `maxStamina 0` estoura toda conta de percentual de fôlego. Piso em `STAMINA.MIN_CAPACITY`.
+- **Onde:** `constants.js`, `Player.js`, `Enemy.js`, `AIBrain.js`.
+
 ## 2026-08-18 — Vazamento no atlas: o export tem QUATRO tamanhos de canvas
 - **Causa medida, não deduzida:** os 110 PNGs não têm dimensão única. São **68x68 (8), 84x84 (37), 88x88 (52) e 96x96 (13)**. A grade era montada com célula de 68 e `drawImage` alinhado ao canto, então todo frame maior invadia a célula vizinha — o pé de um sprite aparecendo sobre a cabeça do outro era o transbordo da linha de cima.
 - **Célula passou a 76.** Medi a maior distância do centro do canvas até a borda opaca do personagem: 36px (`shooting/south/frame_004`), logo 72 é o mínimo; 76 dá folga. 68 não servia — três frames estouravam por 1-2px.

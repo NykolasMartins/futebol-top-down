@@ -157,6 +157,15 @@ Object.assign(GameScene.prototype, {
   applyLanPacket(msg) {
     if (!msg) return;
 
+    // Tocando o replay: só o que muda o RUMO da partida entra (gol, apito
+    // final). Posição vinda da rede é ignorada — ela sobrescreveria o quadro
+    // gravado e a jogada repetida viraria um borrão entre os dois.
+    if (this.isReplaying) {
+      if (msg.gol && !this.souHostLan) this.lanComemorarGol(msg.gol);
+      if (msg.fim && !this.souHostLan) this.lanEncerrar(msg.fim);
+      return;
+    }
+
     // Chute vindo da rede: só o anfitrião executa (é ele quem tem a bola).
     if (msg.chute) this.lanAplicarChute(msg.chute);
 
@@ -384,6 +393,18 @@ Object.assign(GameScene.prototype, {
       this.showGoalCelebration("GOOOL!", 0x00aa00);
     }
     if (this.updateHUD) this.updateHUD();
+
+    // REPLAY no convidado. Sem isto ele só via a comemoração: o anfitrião
+    // rodava o replay dele e, como durante o replay os bonecos do anfitrião
+    // são movidos para as posições gravadas, o que chegava aqui pelo pacote
+    // era a jogada repetida SEM a moldura de replay — bonecos saltando sem
+    // explicação, e nenhum "REPLAY" na tela.
+    //
+    // O convidado tem o próprio buffer (ele grava todo frame, com as posições
+    // que recebeu), então toca o dele, no mesmo instante, com a mesma UI.
+    this.time.delayedCall(1200, () => {
+      if (!this.isGameOver && !this.isReplaying) this.startReplay();
+    });
   },
 
   /**
@@ -401,6 +422,25 @@ Object.assign(GameScene.prototype, {
     // Libera o `endGame` original só desta vez — o gancho barra o resto.
     this._fimAutorizado = true;
     this.endGame();
+  },
+
+  /**
+   * Fim do replay no CONVIDADO: volta a desenhar o que chega e para por aí.
+   *
+   * O `stopReplay` original termina em `resetMatch()`, que repõe bola e
+   * jogadores no meio de campo. No convidado isso brigaria com o anfitrião —
+   * ele é quem decide a saída de bola, e o reset local só criaria um solavanco
+   * antes do próximo pacote corrigir tudo de volta.
+   */
+  lanPararReplay() {
+    this.isReplaying = false;
+    if (this.replayUI) this.replayUI.setAlpha(0);
+    this.physics.world.resume();
+    this.cameras.main.setZoom(1);
+    this.cameras.main.stopFollow();
+    if (this.player) this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+    this.replayBuffer = [];
+    this.gameState = GameStates.PLAYING;
   },
 
   lanTodasEntidades() {
