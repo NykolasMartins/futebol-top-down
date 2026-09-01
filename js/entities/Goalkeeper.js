@@ -11,9 +11,8 @@ class Goalkeeper extends Phaser.Physics.Arcade.Sprite {
     scene.add.existing(this);
     scene.physics.add.existing(this);
 
-    this.setDisplaySize(48, 48);
-    this.body.setSize(26, 32);
-    this.body.setOffset(11, 12);
+    Perspectiva.dePe(this, 48, 48);
+    Perspectiva.corpo(this, 26, 32, 11, 12);
     this.body.setImmovable(true);
     this.setAngle(0);
     this.setDepth(31);
@@ -462,16 +461,13 @@ class Goalkeeper extends Phaser.Physics.Arcade.Sprite {
   updateHitbox() {
     if (!this.body) return;
 
+    // A comparação é com a fonte (`sourceWidth`), não com `body.width`: a
+    // largura vivida já vem multiplicada pela escala do sprite, então ela nunca
+    // é igual a 44 e o hitbox era reescrito todo frame.
     if (this.isJumping) {
-      if (this.body.width !== 44 || this.body.height !== 26) {
-        this.body.setSize(44, 26, false);
-        this.body.setOffset(2, 14);
-      }
+      if (this.body.sourceWidth !== 44) Perspectiva.corpo(this, 44, 26, 2, 14);
     } else {
-      if (this.body.width !== 26 || this.body.height !== 32) {
-        this.body.setSize(26, 32, false);
-        this.body.setOffset(11, 12);
-      }
+      if (this.body.sourceWidth !== 26) Perspectiva.corpo(this, 26, 32, 11, 12);
     }
   }
 
@@ -556,6 +552,14 @@ class Goalkeeper extends Phaser.Physics.Arcade.Sprite {
 
     const speed = ball.body.velocity.length();
     const decision = this.shouldParry(ball, speed);
+    // Luva na bola: espalmar e segurar fazem o mesmo barulho, e é aqui que os
+    // dois caminhos ainda estão juntos.
+    Som.tocar("defesa");
+    // Defesa pesa o quanto o chute pesava: bomba espalha, toque quase não.
+    const impacto = Phaser.Math.Clamp(speed / BALL_PHYSICS.PASS_SPEED_MAX, 0.12, 1);
+    if (this.scene.spawnImpactDust)
+      this.scene.spawnImpactDust(ball.x, ball.y, 0xffffff, { forca: impacto });
+    EfeitosVisuais.tremer(this.scene, 60 + 70 * impacto, 0.0015 + 0.005 * impacto);
     if (decision.parry) {
       this.parryBall(ball, decision);
       return;

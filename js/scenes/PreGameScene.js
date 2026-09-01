@@ -128,7 +128,13 @@ class PreGameScene extends Phaser.Scene {
 
     // ── Painel central ─────────────────────────────────────────────────────
     let centralContent = "";
-    if (isMatchDay && isPlayerPending) {
+    // Temporada encerrada manda em tudo: o botão INICIAR TEMPORADA vive no
+    // painel de dia livre, e um jogo pendente qualquer (uma data FIFA que
+    // sobrou, por exemplo) roubava a tela e deixava o jogador sem como virar o
+    // ano. Mesma regra de sempre: nenhuma tela da carreira sem saída.
+    if (career.seasonEnded) {
+      centralContent = this._buildIdleDayPanel(career);
+    } else if (isMatchDay && isPlayerPending) {
       centralContent = this._buildMatchDayPanel(career, matchDayType);
     } else {
       centralContent = this._buildIdleDayPanel(career);
@@ -136,7 +142,7 @@ class PreGameScene extends Phaser.Scene {
 
     // ── Painel de status ───────────────────────────────────────────────────
     const condPct = Math.min(100, career.condition);
-    const xpPct = Math.min(100, career.xp);
+    const xpPct = Math.min(100, (career.xp / career.xpParaSubir()) * 100);
     const copaStatus = this._buildCopaStatus(career);
 
     // ── Navbar ─────────────────────────────────────────────────────────────
@@ -196,7 +202,8 @@ class PreGameScene extends Phaser.Scene {
             <div class="pui-panel-body" style="height:calc(100% - 44px);overflow-y:auto;display:flex;flex-direction:column;gap:10px;">
 
               ${UIHelper.createDOMBar("CONDIÇÃO FÍSICA", career.condition, 100, "green")}
-              ${UIHelper.createDOMBar(`XP — NÍVEL ${career.level}`, career.xp, 100, "yellow")}
+              ${UIHelper.createDOMBar(`XP — NÍVEL ${career.level}`, career.xp, career.xpParaSubir(), "yellow")}
+              ${this._buildDisciplineRow(career)}
 
               <hr class="pui-divider" />
 
@@ -378,13 +385,25 @@ class PreGameScene extends Phaser.Scene {
   // ─── Conteúdo do painel central: dia de jogo ──────────────────────────────
   _buildMatchDayPanel(career, matchDayType) {
     const isCopa = matchDayType === "copa";
-    const opponent = isCopa
-      ? career.getCopaOpponent()
-      : career.getNextOpponent();
+    const opponent =
+      matchDayType === "selecao"
+        ? career.getSelecaoOpponent()
+        : isCopa
+          ? career.getCopaOpponent()
+          : career.getNextOpponent();
 
+    // SEM ADVERSÁRIO o dia é um beco sem saída: este painel substitui o painel
+    // de dia livre, que é onde mora o AVANÇAR DIA — o jogador ficava olhando
+    // "Aguardando próxima rodada..." sem nada para clicar. O calendário diz que
+    // há jogo, mas o confronto não resolveu (fase de copa ainda sem chave,
+    // convocação desfeita); então a tela volta a ser a de dia livre, com o
+    // aviso por cima. Regra: nenhuma tela da carreira pode ficar sem saída.
     if (!opponent) {
-      return `<p class="pui-text-pixel pui-text-muted" style="font-size:7px;text-align:center;padding-top:40px;">
-        Aguardando próxima rodada...</p>`;
+      return (
+        `<p class="pui-text-pixel pui-text-red" style="font-size:6px;text-align:center;padding:6px 0;">
+          Confronto ainda não definido — avance o dia.</p>` +
+        this._buildIdleDayPanel(career)
+      );
     }
 
     const lineup = career.getLineupStatus
@@ -503,7 +522,12 @@ class PreGameScene extends Phaser.Scene {
         (nextMatch && nextMatch.competitionName) ||
         (nextType === "copa" ? career.playerCupName() : career.playerLeagueName());
       nextLabel += ` (${nome})`;
-      nextClass = nextType === "copa" ? "pui-text-green" : "pui-text-gold";
+      nextClass =
+        nextType === "copa"
+          ? "pui-text-green"
+          : nextType === "selecao"
+            ? "pui-text-blue"
+            : "pui-text-gold";
     }
 
     const condTip =
@@ -601,13 +625,59 @@ class PreGameScene extends Phaser.Scene {
       .join("");
   }
 
+  /**
+   * Lesão, suspensão e amarelos acumulados. Só aparece quando há o que dizer —
+   * uma linha vazia "0 cartões / sem lesão" é ruído em toda tela do ano.
+   */
+  _buildDisciplineRow(career) {
+    const d = career.discipline || { yellows: 0, suspended: 0 };
+    const avisos = [];
+    if (career.injuryDays > 0)
+      avisos.push(
+        `<span class="pui-text-red">🩹 LESIONADO — ${career.injuryDays} ${career.injuryDays === 1 ? "dia" : "dias"} fora</span>`,
+      );
+    if (d.suspended > 0)
+      avisos.push(
+        `<span class="pui-text-red">🟥 SUSPENSO — ${d.suspended} ${d.suspended === 1 ? "jogo" : "jogos"}</span>`,
+      );
+    if (d.yellows > 0)
+      avisos.push(
+        `<span class="pui-text-gold">🟨 ${d.yellows}/${DISCIPLINE.YELLOWS_PER_BAN} amarelos na temporada</span>`,
+      );
+    if (!avisos.length) return "";
+    return `
+      <div class="pui-config-row" style="flex-direction:column;align-items:flex-start;gap:4px;">
+        ${avisos.map((a) => `<div class="pui-text-pixel" style="font-size:6px;">${a}</div>`).join("")}
+      </div>`;
+  }
+
   // ─── Handlers de ação ─────────────────────────────────────────────────────
   _handlePlayMatch(career, matchDayType) {
     const isCopa = matchDayType === "copa";
-    const opponent = isCopa
-      ? career.getCopaOpponent()
-      : career.getNextOpponent();
-    if (!opponent) return;
+    const isSelecao = matchDayType === "selecao";
+    const opponent = isSelecao
+      ? career.getSelecaoOpponent()
+      : isCopa
+        ? career.getCopaOpponent()
+        : career.getNextOpponent();
+    // Sem adversário o clique não fazia NADA — nem entrava em campo, nem
+    // avisava. Do lado de cá isso é indistinguível de "o jogo travou".
+    if (!opponent) {
+      UIHelper.toast(
+        this,
+        "Confronto ainda não definido. Avance o dia para o mundo resolver a chave.",
+        "erro",
+      );
+      return;
+    }
+
+    // Data FIFA: o jogador veste a SELEÇÃO, não o clube — uniforme e elenco
+    // saem da chave `selecao_*`, que o `getTeamRoster` já sabe montar.
+    const minhaSelecao = isSelecao ? career.nationalTeam() : null;
+    const kitSelecao =
+      minhaSelecao && typeof TEAMS_DB !== "undefined"
+        ? TEAMS_DB[minhaSelecao.id]
+        : null;
 
     const lineup = career.getLineupStatus
       ? career.getLineupStatus()
@@ -641,6 +711,25 @@ class PreGameScene extends Phaser.Scene {
 
     const controlMode = localStorage.getItem("controlMode") || "single";
 
+    // CÃO DE GUARDA: se a partida não entrar em cena, o jogador não pode ficar
+    // olhando para uma tela morta. Vale para o fade que não completa e para a
+    // cena que morre no `init`/`preload` — os dois somem sem erro no console e
+    // deixam exatamente o sintoma "cliquei em JOGAR e travou".
+    this._vigiaPartida = this.time.delayedCall(12000, () => {
+      const cena = this.scene.get("GameScene");
+      const entrou = cena && cena.scene.isActive();
+      if (entrou) return;
+      this.cameras.main.resetFX();
+      this.cameras.main.fadeIn(150, 0, 0, 0);
+      UIHelper.toast(
+        this,
+        "A partida não carregou. Tente de novo ou avance o dia — a temporada segue.",
+        "erro",
+      );
+      console.error("GameScene não entrou em cena a tempo (matchType:", matchDayType, ")");
+    });
+    this.events.once("shutdown", () => this._vigiaPartida?.remove());
+
     this.cameras.main.fadeOut(200, 0, 0, 0);
     this.cameras.main.once("camerafadeoutcomplete", () => {
       this.scene.start("GameScene", {
@@ -650,8 +739,15 @@ class PreGameScene extends Phaser.Scene {
         initialScorePlayer: firstHalf.playerScore,
         initialScoreOpponent: firstHalf.opponentScore,
         startSecondHalf: lineup.code === "bench",
-        playerTeamColor: career.currentTeam.shirtColor,
-        playerTeamColor2: career.currentTeam.shirtColor2,
+        // `homeTeam` é o que o GameScene usa para elenco e uniforme. Na data
+        // FIFA ele aponta para a seleção; no resto continua vindo do clube.
+        homeTeam: minhaSelecao ? minhaSelecao.id : career.currentTeam.name,
+        playerTeamColor: kitSelecao
+          ? kitSelecao.shirt1
+          : career.currentTeam.shirtColor,
+        playerTeamColor2: kitSelecao
+          ? kitSelecao.shirt2
+          : career.currentTeam.shirtColor2,
         opponentTeamColor: opponent.shirtColor,
         opponentTeamColor2: opponent.shirtColor2,
         controlMode, // Pass control mode to GameScene
@@ -668,40 +764,35 @@ class PreGameScene extends Phaser.Scene {
   _handleActivity(type) {
     const career = window.careerMode;
     const result = type === "train" ? career.train() : career.rest();
-    // Mostrar feedback via toast rápido
-    const toast = document.createElement("div");
-    toast.style.cssText = `
-      position:fixed;bottom:80px;left:50%;transform:translateX(-50%);
-      background:#0a1f0a;border:2px solid #2a7a2a;padding:10px 20px;z-index:9999;
-      font-family:'Press Start 2P',monospace;font-size:7px;
-      color:${result.success ? "#00ff88" : "#ff4455"};
-      box-shadow:3px 3px 0 #000;`;
-    toast.textContent = result.msg;
-    document.body.appendChild(toast);
-    setTimeout(() => {
-      if (toast.parentNode) toast.remove();
-      if (result.success) {
-        this.cameras.main.fadeOut(150, 0, 0, 0);
-        this.cameras.main.once("camerafadeoutcomplete", () =>
-          this.scene.restart(),
-        );
-      }
-    }, 1500);
+    // Mesmo aviso do resto do jogo. Este aqui era um `div` montado à mão e
+    // pendurado no `document.body` — fora do container do Phaser, com estilo
+    // próprio e cor cravada. Um lugar só para "avisar o jogador".
+    UIHelper.toast(this, result.msg, result.success ? "ok" : "erro");
+    if (!result.success) return;
+    // Falha não recarrega a tela: só o que mudou alguma coisa precisa redesenhar.
+    this.time.delayedCall(1400, () => {
+      this.cameras.main.fadeOut(150, 0, 0, 0);
+      this.cameras.main.once("camerafadeoutcomplete", () =>
+        this.scene.restart(),
+      );
+    });
   }
 
   // ─────────────────────────────────────────────────────────────────────────
   // Notificações pendentes
   // ─────────────────────────────────────────────────────────────────────────
+  /**
+   * Despeja a fila INTEIRA de uma vez, no canto, sem bloquear a tela.
+   *
+   * Era um modal por aviso, um de cada vez, cada um pedindo OK e chamando o
+   * próximo no fechamento: passar um dia com três notificações custava três
+   * cliques e três esperas, com a tela travada no meio. Ninguém lia o terceiro.
+   */
   _showPendingNotifications(career) {
-    const notif = career.popNotification();
-    if (!notif) return;
-
-    const { close } = UIHelper.createDOMNotification(
-      this,
-      notif.msg,
-      notif.type,
-      () => this._showPendingNotifications(career),
-    );
+    const fila = [];
+    for (let n = career.popNotification(); n; n = career.popNotification())
+      fila.push(n);
+    UIHelper.toastFila(this, fila);
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -796,7 +887,10 @@ class PreGameScene extends Phaser.Scene {
     // Eventos do modal
     body.addEventListener("click", (e) => {
       if (e.target.closest("#btn-quick-train")) {
-        const result = career.train();
+        // UMA porta só. Aqui havia um `career.train()` solto (com o resultado
+        // jogado fora) ANTES do `_handleActivity`, que treina de novo: o
+        // primeiro consumia o dia, o segundo batia na trava e o jogador via
+        // "Já realizou uma atividade hoje!" no PRIMEIRO treino do dia.
         close();
         this._handleActivity("train");
         return;

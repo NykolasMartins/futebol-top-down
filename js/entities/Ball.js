@@ -35,7 +35,9 @@ class Ball extends Phaser.Physics.Arcade.Sprite {
 
     // Sprite Visual da Bola (o que o jogador vê "voando")
     this.visualBall = scene.add.sprite(x, y, "ball_spritesheet", 0);
-    this.visualBall.setDisplaySize(24, 24);
+    // A sombra (o sprite principal) FICA achatada — ela está no chão, é o que
+    // a inclinação deve fazer com ela. Só a bola no ar volta a ser redonda.
+    Perspectiva.dePe(this.visualBall, 24, 24);
     this.visualBall.setDepth(35); // Bola sempre acima
 
     this.customVx = 0;
@@ -89,6 +91,15 @@ class Ball extends Phaser.Physics.Arcade.Sprite {
         if (this.z <= 0) {
           this.z = 0;
           if (Math.abs(this.vz) > 1.5) {
+            // Quique visível: quanto mais alto ela vinha, mais grama levanta.
+            if (this.scene && this.scene.spawnImpactDust) {
+              this.scene.spawnImpactDust(this.x, this.y, 0x8fbf63, {
+                forca: Phaser.Math.Clamp(Math.abs(this.vz) / 14, 0.08, 0.65),
+                angulo: -Math.PI / 2,
+                abertura: Math.PI * 0.9,
+                depth: 12,
+              });
+            }
             this.vz = -this.vz * this.bounce; // Inverte e reduz velocidade
           } else {
             this.vz = 0;
@@ -194,19 +205,38 @@ class Ball extends Phaser.Physics.Arcade.Sprite {
     const g = this.trailGraphics;
     g.clear();
 
-    if (this.curveAmount === 0 || this.owner) {
+    if (
+      this.owner ||
+      (typeof EfeitosVisuais !== "undefined" && !EfeitosVisuais.ligado("particulas"))
+    ) {
+      this.trail.length = 0;
+      return;
+    }
+
+    // A força do rastro é a VELOCIDADE. Antes ele só existia em chute com
+    // curva, então a bomba reta — o chute que mais precisa parecer forte —
+    // viajava com o mesmo desenho de um toque lateral. A curva virou PISO: bola
+    // rodando risca o ar mesmo devagar.
+    const v = this.body ? this.body.velocity.length() : 0;
+    const faixa = BALL_PHYSICS.PASS_SPEED_MAX - FEEDBACK.RASTRO_V_MIN;
+    const forca = Math.max(
+      Phaser.Math.Clamp((v - FEEDBACK.RASTRO_V_MIN) / faixa, 0, 1),
+      this.curveAmount !== 0 ? FEEDBACK.RASTRO_CURVA : 0,
+    );
+    if (forca <= 0.02) {
       this.trail.length = 0;
       return;
     }
 
     this.trail.push({ x: this.visualBall.x, y: this.visualBall.y });
-    if (this.trail.length > 14) this.trail.shift();
+    const maximo = Math.round(5 + 11 * forca);
+    while (this.trail.length > maximo) this.trail.shift();
 
     // O mais antigo é o mais fraco/menor: fade natural sem tween nem asset.
     this.trail.forEach((p, i) => {
       const t = (i + 1) / this.trail.length;
-      g.fillStyle(0xffffff, 0.4 * t);
-      g.fillCircle(p.x, p.y, 9 * t);
+      g.fillStyle(0xffffff, 0.45 * forca * t);
+      g.fillCircle(p.x, p.y, (3 + 7 * forca) * t);
     });
   }
 

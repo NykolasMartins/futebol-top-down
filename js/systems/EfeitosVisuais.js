@@ -43,6 +43,11 @@ const EfeitosVisuais = {
       dica: "Entorta os menus como o vidro da TV. Pesa em máquina fraca",
     },
     {
+      id: "particulas",
+      nome: "PARTÍCULAS",
+      dica: "Poeira, faíscas e rastro proporcionais à força da jogada",
+    },
+    {
       id: "tremor",
       nome: "TREMOR DE CÂMERA",
       dica: "Sacode a tela em gol, bote e defesa",

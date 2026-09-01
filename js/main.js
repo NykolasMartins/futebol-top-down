@@ -8,17 +8,12 @@ const config = {
   input: {
     gamepad: true, // Ativa suporte a gamepad!
   },
-  // O projeto não carrega NENHUM áudio hoje (zero `load.audio`), mas o Phaser
-  // cria um WebAudioSoundManager no boot de qualquer jeito — e o Chrome loga
-  // "The AudioContext was not allowed to start" porque isso acontece antes do
-  // primeiro clique. Sem som para tocar, o gerente de áudio só existia para
-  // gerar esse aviso.
-  //
-  // QUANDO ENTRAR SOM: troque `noAudio` por false e destrave o contexto no
-  // primeiro input do usuário, nunca no `create()`/`preload()`:
-  //   this.input.once("pointerdown", () => this.sound.context.resume());
-  // `this.sound.mute` (usado no HUD) e `playSfx()` seguem funcionando nos dois
-  // modos — o gerente mudo tem a mesma interface.
+  // O jogo TEM som (js/systems/Som.js), e mesmo assim o gerente do Phaser
+  // continua desligado: não existe um `load.audio` sequer para ele gerenciar —
+  // todo som é gerado no WebAudio em runtime, com contexto próprio criado no
+  // primeiro gesto do usuário (fim deste arquivo). Ligar `noAudio: false` aqui
+  // só criaria um SEGUNDO contexto, vazio, e de volta o aviso do Chrome
+  // ("The AudioContext was not allowed to start") por nascer antes do clique.
   audio: { noAudio: true },
   physics: {
     default: "arcade",
@@ -117,4 +112,35 @@ game.events.once(Phaser.Core.Events.READY, () => {
   // velho — o texto e o resto do JS vêm do mesmo arquivo.
   const selo = document.getElementById("app-version");
   if (selo) selo.textContent = "v" + GAME_VERSION;
+
+  // CACHE: cada `<script>` e `<link>` do jogo carrega com `?v=<versão>`, então
+  // versão nova é URL nova e o navegador NÃO tem como servir a antiga. Aqui só
+  // se confere se o `index.html` (que é revalidado) está falando a mesma versão
+  // que o JS que chegou — se divergirem, a página está rodando arquivos de duas
+  // entregas ao mesmo tempo, que é o pior dos mundos e some do console sem isto.
+  const marca = [...document.querySelectorAll("script[src]")]
+    .map((s) => new URL(s.src, location.href).searchParams.get("v"))
+    .find(Boolean);
+  if (marca && marca !== GAME_VERSION) {
+    console.error(
+      `Versão MISTURADA: index.html pede v${marca}, o JS carregado é v${GAME_VERSION}. Recarregue com Ctrl+Shift+R.`,
+    );
+    if (selo) {
+      selo.textContent = `v${GAME_VERSION} ≠ v${marca}`;
+      selo.style.color = "var(--pui-red-bright)";
+    }
+  }
+
 });
+
+// ÁUDIO: o contexto só pode nascer dentro de um gesto do usuário — regra do
+// navegador, e é o que gerava "The AudioContext was not allowed to start" no
+// console quando nascia no boot.
+//
+// Fica FORA do `READY` e ouve os quatro eventos de propósito: o gesto pode
+// chegar antes do jogo montar, e nem toda origem de clique emite `pointerdown`
+// (automação e alguns navegadores mandam só `mousedown`). Custa quatro
+// listeners que se removem sozinhos no primeiro gesto.
+["pointerdown", "mousedown", "touchstart", "keydown"].forEach((evento) =>
+  document.addEventListener(evento, () => Som.destravar(), { once: true }),
+);

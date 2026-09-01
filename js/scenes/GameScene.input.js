@@ -62,6 +62,14 @@ Object.assign(GameScene.prototype, {
     // --- PAUSA COM ESC ---
     this.input.keyboard.on("keydown-ESC", () => this.togglePauseMenu());
 
+    // --- Z: CÂMERA NA BOLA / NO JOGADOR ---
+    // Vale com o jogo parado (bola parada, comemoração): olhar o campo é
+    // justamente o que se quer fazer nesses momentos.
+    this.input.keyboard.on("keydown-Z", () => {
+      if (this._pauseMenuActive) return;
+      this.alternarCamera();
+    });
+
     // --- MOUSE: ESQUERDO = chute (carrega e solta), DIREITO = passe ---
     // Um botão, uma função. Antes o esquerdo era chute OU passe conforme o
     // tempo de clique: quem queria chute fraco de perto acabava tocando a bola.

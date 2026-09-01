@@ -143,59 +143,125 @@ class UIHelper {
     domEl.node.style.height = "100%";
 
     const closeBtn = header.querySelector(".pui-modal-close");
+    let fechado = false;
     const close = () => {
+      if (fechado) return;
+      fechado = true;
+      scene.input.keyboard.off("keydown-ESC", close);
       domEl.destroy();
       if (onClose) onClose();
     };
     closeBtn.addEventListener("click", close);
+
+    // ESC e clique FORA fecham. Custa três linhas, vale para os nove modais do
+    // jogo, e é o que todo mundo já tenta fazer antes de procurar o ✕.
+    scene.input.keyboard.on("keydown-ESC", close);
+    wrap.addEventListener("click", (e) => {
+      if (e.target === wrap) close();
+    });
 
     return { domEl, body, close };
   }
 
   // ─── NOTIFICAÇÃO TOAST (DOM) ──────────────────────────────────────────────
 
-  static createDOMNotification(scene, message, type, onClose) {
-    const typeColors = {
-      salary: "#1a6a1a",
-      trophy: "#6a5a00",
-      copa_elim: "#6a1a1a",
-      copa_phase: "#1a4a6a",
-      transfer: "#1a1a6a",
-      default: "#1a1a1a",
+  /**
+   * PILHA DE AVISOS — não bloqueante, empilhada, some sozinha.
+   *
+   * A versão anterior era um MODAL por notificação, um de cada vez, cada um
+   * exigindo OK: passar um dia com três avisos custava três cliques e três
+   * esperas, em cima de uma tela que o jogador nem podia usar enquanto isso.
+   * Aqui os avisos aparecem juntos no canto, o jogo continua clicável, e cada
+   * um sai sozinho — clicar só acelera.
+   *
+   * A CAMADA tem o tamanho do canvas cravado no ui.css: o `add.dom` a pendura
+   * DENTRO do container DOM do Phaser, e não como filha direta do
+   * `#game-container` — a regra que estica os filhos diretos não a alcança, e
+   * sem tamanho ela encolhia até o texto e ancorava no canto errado.
+   */
+  static toast(scene, message, type, opcoes) {
+    if (!scene || !scene.add || !message) return null;
+    const cfg = opcoes || {};
+
+    if (!scene._toastLayer || !scene._toastLayer.node) {
+      const camada = document.createElement("div");
+      camada.className = "pui-toast-layer";
+      // O empilhamento vive num filho, não no nó que o Phaser gerencia: ele
+      // escreve `display` INLINE no elemento do `add.dom`, e inline ganha da
+      // folha de estilo — o `display:flex` da camada virava `block` e todo
+      // aviso ancorava no canto superior esquerdo.
+      camada.appendChild(
+        Object.assign(document.createElement("div"), {
+          className: "pui-toast-stack",
+        }),
+      );
+      const dom = scene.add.dom(0, 0, camada).setOrigin(0, 0).setDepth(6000);
+      if (dom.setScrollFactor) dom.setScrollFactor(0);
+      scene._toastLayer = dom;
+      // Cena que troca leva a pilha junto: são nós DOM soltos, e o Phaser não
+      // recolhe nada que ele não criou (mesma regra do placar e da torcida).
+      scene.events.once("shutdown", () => {
+        if (scene._toastLayer) scene._toastLayer.destroy();
+        scene._toastLayer = null;
+      });
+    }
+    // `add.dom(x, y, el)` devolve o PRÓPRIO elemento em `.node`; a pilha é o
+    // filho dele (ver acima).
+    const camadaNode = scene._toastLayer.node;
+    const pilha = camadaNode.querySelector(".pui-toast-stack") || camadaNode;
+    // `main.css` crava `z-index: 1000 !important` em TODA camada DOM do Phaser,
+    // então quem decide quem fica por cima é a ordem no DOM, não o `setDepth`.
+    // Reanexar joga a pilha para o fim: sem isto o aviso nasce ATRÁS do painel
+    // opaco da tela (a fila é despejada antes de a UI ser montada).
+    if (camadaNode.parentNode)
+      camadaNode.parentNode.appendChild(camadaNode);
+
+    const card = document.createElement("div");
+    card.className = "pui-toast pui-toast-" + (type || "info");
+    card.textContent = message;
+    pilha.appendChild(card);
+
+    // Tempo proporcional ao texto: aviso curto não precisa ficar 5s na tela, e
+    // aviso longo não pode sumir antes de ser lido.
+    const ms =
+      cfg.duracao ||
+      Math.min(7000, Math.max(2500, 1200 + String(message).length * 45));
+
+    let fechado = false;
+    const fechar = () => {
+      if (fechado) return;
+      fechado = true;
+      card.classList.add("saindo");
+      // 220ms = a duração da animação de saída no ui.css.
+      setTimeout(() => card.remove(), 220);
     };
-    const bg = typeColors[type] || typeColors.default;
+    card.addEventListener("click", fechar);
+    setTimeout(fechar, ms);
 
-    const wrap = document.createElement("div");
-    wrap.className = "pui-modal-wrap";
-    wrap.style.cssText = "position:absolute;inset:0;";
+    // Teto de pilha: acima disso a tela vira parede de texto e o jogador não lê
+    // nenhum. O mais VELHO sai primeiro.
+    const MAX = 4;
+    const vivos = [...pilha.querySelectorAll(".pui-toast:not(.saindo)")];
+    if (vivos.length > MAX)
+      vivos.slice(0, vivos.length - MAX).forEach((v) => v.click());
 
-    const box = document.createElement("div");
-    box.className = "pui-notification";
-    box.style.background = bg;
-    box.innerHTML = `
-      <p class="pui-text-pixel" style="font-size:9px;color:#fff;margin-bottom:16px;line-height:2;">${message}</p>
-      <button class="pui-btn pui-btn-dark" style="width:160px;height:40px;font-size:7px;">OK</button>`;
-
-    wrap.appendChild(box);
-
-    const domEl = scene.add.dom(500, 300, wrap).setOrigin(0.5).setDepth(5000);
-    domEl.node.style.width = "1000px";
-    domEl.node.style.height = "600px";
-
-    const close = () => {
-      domEl.destroy();
-      if (onClose) onClose();
-    };
-
-    box.querySelector("button").addEventListener("click", close);
-
-    // Auto-fechar após 4 s
-    scene.time.delayedCall(4000, () => {
-      if (domEl && domEl.active) close();
-    });
-
-    return { domEl, close };
+    return { card, fechar };
   }
+
+  /** Despeja uma fila inteira de avisos de uma vez, com um respiro entre eles. */
+  static toastFila(scene, itens) {
+    (itens || []).forEach((item, i) => {
+      const msg = typeof item === "string" ? item : item.msg;
+      const tipo = typeof item === "string" ? "info" : item.type;
+      // Escalonado: três cards nascendo no mesmo frame viram um bloco só.
+      scene.time.delayedCall(i * 260, () => UIHelper.toast(scene, msg, tipo));
+    });
+  }
+
+  // O antigo `createDOMNotification` (um MODAL por aviso, com botão OK) foi
+  // apagado junto com o último chamador: ele bloqueava a tela inteira para dar
+  // uma linha de texto, e a fila de um dia inteiro virava uma sequência de
+  // cliques. Quem avisa agora é `toast()`/`toastFila()`, logo acima.
 
   // =========================================================================
   // CANVAS FALLBACKS — mantidos para GameScene, TrainingScene e outros

@@ -72,7 +72,9 @@ Object.assign(GameScene.prototype, {
     // Focar a câmera na bola durante o replay para ser mais dramático
     this.cameras.main.stopFollow();
     this.cameras.main.startFollow(this.ball, true, 0.1, 0.1);
-    this.cameras.main.setZoom(1.1); // Zoom leve que não corta o HUD com setScrollFactor(0)
+    // Pela porta: `setZoom` cru aqui devolveria o campo ao top-down puro
+    // durante o replay e o traria de volta inclinado no fim.
+    Perspectiva.zoom(this.cameras.main, 1.1); // Zoom leve que não corta o HUD
   },
 
   playNextReplayFrame() {
@@ -146,9 +148,9 @@ Object.assign(GameScene.prototype, {
     this.isReplaying = false;
     this.replayUI.setAlpha(0);
     this.physics.world.resume();
-    this.cameras.main.setZoom(1);
+    Perspectiva.zoom(this.cameras.main, 1);
     this.cameras.main.stopFollow();
-    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+    this.seguirCamera();
 
     // Limpar buffer para o próximo lance
     this.replayBuffer = [];

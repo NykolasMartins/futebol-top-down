@@ -74,13 +74,71 @@ const CARD_HUD = {
 };
 
 // =============================================================================
+// GAME FEEL — o tempo entre a intenção e a resposta
+// =============================================================================
+// Jogabilidade boa e timing ruim é a diferença entre "funciona" e "gostoso".
+// Estes números não mudam NENHUMA regra: mudam quanto o jogo faz o jogador
+// Inclinação da câmera sobre o campo. É o COSSENO do ângulo de queda: 1 é
+// top-down puro (o que o jogo era), 0.8 ≈ 37° e é o que casa com bonecos
+// desenhados em high top-down. Quem aplica é o `Perspectiva`, e mexer aqui é
+// o único jeito de afinar — o número não está escrito em lugar nenhum além
+// deste. Abaixo de ~0.65 o campo vira uma faixa e a marcação some.
+// Feedback visual da partida. Tudo aqui é PROPORCIONAL a um número que a
+// jogada já produziu (força do chute, velocidade da bola, do boneco) — efeito
+// de tamanho fixo diz "aconteceu algo" e nada mais, e é isso que faz um jogo
+// parecer surdo. Os tetos existem para a tela não virar poeira.
+const FEEDBACK = {
+  RASTRO_V_MIN: 200, // px/s: abaixo disso a bola não deixa rastro
+  RASTRO_CURVA: 0.55, // piso de rastro da bola rodando, mesmo devagar
+  POEIRA_CORRIDA_MS: 150, // intervalo entre nuvens de quem corre
+  POEIRA_CARRINHO_MS: 55, // o carrinho é contínuo: arranca grama o tempo todo
+  CHUTE_TREMOR_MIN: 0.72, // fração da força a partir da qual o chute sacode
+  PARTICULAS_MIN: 3, // nuvem mais fraca possível
+  PARTICULAS_MAX: 18, // e a mais forte
+};
+
+const PERSPECTIVA = {
+  ACHATAMENTO_Y: 0.8,
+};
+
+// esperar e quanto ele confirma o que acabou de acontecer. Afine jogando —
+// é o único jeito de avaliar feel.
+const GAME_FEEL = {
+  // ── Buffer de input ───────────────────────────────────────────────────────
+  // Apertar chute/passe um pouco ANTES de dominar a bola executa a jogada no
+  // instante em que ela chega. É o que faz o jogo responder ao que o jogador
+  // quis, e não ao frame exato em que ele apertou.
+  //
+  // O passe já era enfileirado, mas SEM PRAZO: um comando de dez segundos atrás
+  // disparava quando a bola enfim chegasse — o boneco fazia algo que ninguém
+  // mais estava pedindo. Agora o pedido vence.
+  INPUT_BUFFER_MS: 220,
+
+  // ── Bola parada: o tempo em que ninguém joga ──────────────────────────────
+  // Era 400 + 600 de fade e 1800 até a IA cobrar: quase 2,8s parado a cada
+  // lateral. Encurtar aqui é o que mais muda a sensação de ritmo do jogo.
+  SETPIECE_FADE_OUT_MS: 240,
+  SETPIECE_FADE_IN_MS: 360,
+  SETPIECE_AI_DELAY_MS: 850,
+
+  // ── Confirmação do gol ────────────────────────────────────────────────────
+  // Congelar por um instante no gol é o "peso" que o replay sozinho não dá.
+  GOAL_HITSTOP_MS: 110,
+  GOAL_SHAKE_MS: 240,
+  GOAL_SHAKE_INTENSITY: 0.009,
+
+  // Espera antes de sair da partida para a tela de fim de jogo.
+  ENDGAME_DELAY_MS: 1100,
+};
+
+// =============================================================================
 // VERSÃO
 // =============================================================================
 // MAJOR: virada grande no jogo. MINOR: feature nova. PATCH: correção ou ajuste.
 // Aparece no canto superior direito em TODA tela. Existe por um motivo prático:
 // o navegador serve JS velho calado, e "a versão da tela não é a que subi" é a
 // única forma barata de separar cache de regressão.
-const GAME_VERSION = "1.4.0";
+const GAME_VERSION = "1.15.0";
 
 // =============================================================================
 // FÍSICA DA BOLA
@@ -253,6 +311,10 @@ const TACKLE = {
 // espaço) e fecha quando ela entra no terço final devagar (cara a cara).
 // Interpolado por LERP — corte seco de zoom embrulha o estômago.
 const CAMERA = {
+  // Suavidade do acompanhamento. A bola corre mais que o boneco, então segui-la
+  // com o mesmo lerp embrulha o estômago: mais lento = a câmera "respira".
+  LERP_JOGADOR: 0.08,
+  LERP_BOLA: 0.055,
   ZOOM_WIDE: 0.9, // bola rápida ou no meio de campo
   ZOOM_DEFAULT: 1.0,
   ZOOM_TIGHT: 1.18, // terço final, jogada armada
@@ -443,6 +505,10 @@ const AI_BEHAVIOR = {
 const GOALKEEPER = {
   REACH_STANDING: 48,
   REACH_JUMPING: 90,
+  // A que distância da bola o goleiro tenta agarrar. Vivia cravado no
+  // `checkCollisions` como `45`, junto dos dois alcances acima — que existiam
+  // aqui sem ninguém ler.
+  CATCH_DISTANCE: 45,
   COLLIDE_CATCH_DIST: 45,
   // Goleiro pesado: ~45% mais lento que um jogador de linha. Antes ele corria
   // a 3.0, mais rápido que a corrida base de um atleta (1.16 após o corte).
@@ -597,6 +663,16 @@ const SWAP_TUNING = { SAT_MIN: 0.25, MAX_HUE_DIST: 45 };
 // UNIFORMES DOS TIMES — só cor, a arte é uma só
 // =============================================================================
 const TEAMS_DB = {
+  // Seleções (ver NATIONAL_TEAMS em LeaguesDB.js). Precisam estar AQUI: sem
+  // entrada no TEAMS_DB o `buildKitAtlas` cai no fallback do Flamengo e os dois
+  // times entram de vermelho, sem erro nenhum no console.
+  selecao_brasil: { shirt1: 0xf7d117, shirt2: 0x009c3b, shorts: 0x002776, logo: 0x009c3b },
+  selecao_inglaterra: { shirt1: 0xffffff, shirt2: 0xcf081f, shorts: 0x001489, logo: 0xcf081f },
+  selecao_espanha: { shirt1: 0xc60b1e, shirt2: 0xffc400, shorts: 0x1a1a6e, logo: 0xffc400 },
+  selecao_italia: { shirt1: 0x1a4fa0, shirt2: 0x1a4fa0, shorts: 0xffffff, logo: 0xffffff },
+  selecao_alemanha: { shirt1: 0xffffff, shirt2: 0x111111, shorts: 0x111111, logo: 0xdd0000 },
+  selecao_franca: { shirt1: 0x1a2a6c, shirt2: 0xffffff, shorts: 0xffffff, logo: 0xce1126 },
+
   Flamengo: { shirt1: 0xc52728, shirt2: 0x111111, shorts: 0x111111, logo: 0xffffff },
   Palmeiras: { shirt1: 0x006437, shirt2: 0x006437, shorts: 0xffffff, logo: 0xffffff },
   Sao_Paulo: { shirt1: 0xffffff, shirt2: 0xc52728, shorts: 0xffffff, logo: 0x111111 },
@@ -752,9 +828,12 @@ const CURVE_SKILL = {
 // CAREER MODE — VALORES BASE
 // =============================================================================
 const CAREER_BASE = {
-  START_SPEED: 68,
-  START_KICK_POWER: 68,
-  START_STAMINA: 72,
+  // O jogador COMEÇA fraco: a carreira é a subida. Com 68/68/72 (overall 69)
+  // ele já nascia a cinco pontos da Seleção e a progressão não tinha para onde
+  // ir. Aqui ele nasce em 56 e precisa construir o resto.
+  START_SPEED: 55,
+  START_KICK_POWER: 54,
+  START_STAMINA: 58,
   START_LEVEL: 1,
   START_XP: 0,
   START_SKILL_POINTS: 0,
@@ -764,6 +843,68 @@ const CAREER_BASE = {
   CONDITION_PENALTY_THRESHOLD: 70,
   START_DATE_YYYY_MM_DD: [2026, 3, 1],
   MATCH_RATING_START: 6.0,
+  // Idade do usuário e prazo do contrato. O contrato é um RELÓGIO: é o último
+  // ano dele que transforma o mercado de "proposta aleatória" em decisão.
+  START_AGE: 18,
+  CONTRACT_YEARS: 3,
+  // Convocação: a régua para a seleção olhar para você. `rating` do usuário é
+  // a média dos três atributos.
+  NATIONAL_CALL_RATING: 74,
+  NATIONAL_MATCHES_PER_SEASON: 6,
+  // Datas FIFA JOGÁVEIS no calendário do usuário por temporada. As outras da
+  // janela (NATIONAL_MATCHES_PER_SEASON) seguem simuladas no fim do ano.
+  NATIONAL_WINDOWS: 4,
+  // Recuperação por dia LIVRE numa temporada simulada. O jogador automático não
+  // clica em "descansar": com os mesmos +3 do dia normal ele terminava o ano
+  // exausto e reserva, o que não é uma simulação da carreira dele — é uma
+  // simulação de alguém que nunca dorme.
+  SIM_REST_PER_DAY: 9,
+
+  // ── Curva de nível ────────────────────────────────────────────────────────
+  // Custo do PRÓXIMO nível: `XP_BASE + (nível - 1) * XP_POR_NIVEL`. Era 100
+  // fixo, e uma temporada inteira rendia ~29 níveis — 29 pontos de skill, que
+  // é mais do que a árvore inteira. Progressivo, o primeiro nível sai barato e
+  // o vigésimo custa cinco vezes mais.
+  XP_BASE: 100,
+  XP_POR_NIVEL: 45,
+};
+
+// Skills que mexem em ATRIBUTO: quanto cada nível dá e quantos níveis existem.
+// Fonte única — o número aparecia no texto da tela E no clique que aplica, e
+// mudar um sem o outro fazia o card prometer uma coisa e entregar outra.
+const SKILL_ATTR = {
+  sprintMaster: { atributo: "speed", ganho: 1, max: 12 },
+  powerShot: { atributo: "kickPower", ganho: 1, max: 12 },
+  tireless: { atributo: "stamina", ganho: 2, max: 12 },
+};
+
+// =============================================================================
+// COPA DO MUNDO
+// =============================================================================
+// A cada N temporadas as datas FIFA deixam de ser amistoso e viram mata-mata
+// entre as seleções. É o pico narrativo que faltava à carreira longa: até aqui
+// a convocação rendia jogos e nada mais.
+const MUNDIAL = {
+  A_CADA: 4, // temporadas entre uma Copa e a seguinte
+  NOME: "Copa do Mundo",
+};
+
+// =============================================================================
+// DISCIPLINA E LESÃO (carreira)
+// =============================================================================
+// O elo que faltava entre a partida e a temporada: até aqui o cartão morria no
+// apito final e dava para jogar todo jogo com o fôlego no chão.
+const DISCIPLINE = {
+  YELLOWS_PER_BAN: 3, // amarelos acumulados que custam um jogo
+  RED_BAN_MATCHES: 2, // o vermelho já sai suspendendo
+  // Risco de lesão: pancada tomada + desgaste. Somados e limitados pelo teto —
+  // uma partida violenta com o jogador acabado bate no máximo, nunca em 100%.
+  INJURY_PER_FOUL: 0.02, // por falta sofrida (carrinho conta dobrado)
+  INJURY_PER_FATIGUE: 0.25, // peso do fôlego que faltou no fim
+  FIT_SAFE: 75, // acima disto o cansaço não pesa no risco
+  INJURY_RISK_MAX: 0.35,
+  INJURY_DAYS_MIN: 4,
+  INJURY_DAYS_MAX: 16,
 };
 
 // =============================================================================

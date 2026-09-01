@@ -40,10 +40,14 @@ class CharacterCreationScene extends Phaser.Scene {
     this.selectedHairColor = this.hairColors[0].hex;
 
     this.positionBases = {
-      "Atacante": { speed: 72, kickPower: 75, stamina: 65, desc: "Vel 72 | Chute 75 | Resist 65" },
-      "Meia":     { speed: 68, kickPower: 68, stamina: 72, desc: "Vel 68 | Chute 68 | Resist 72" },
-      "Lateral":  { speed: 76, kickPower: 62, stamina: 70, desc: "Vel 76 | Chute 62 | Resist 70" },
-      "Zagueiro": { speed: 60, kickPower: 70, stamina: 68, desc: "Vel 60 | Chute 70 | Resist 68" },
+      // O jogador COMEÇA fraco — overall ~57, não ~70. A forma de cada posição
+      // continua a mesma (o atacante chuta, o lateral corre); o que mudou é o
+      // ponto de partida, para a carreira ter para onde subir. A régua é
+      // `CAREER_BASE.START_*`, e estes números orbitam ela.
+      "Atacante": { speed: 60, kickPower: 63, stamina: 53, desc: "Vel 60 | Chute 63 | Resist 53" },
+      "Meia":     { speed: 56, kickPower: 56, stamina: 60, desc: "Vel 56 | Chute 56 | Resist 60" },
+      "Lateral":  { speed: 64, kickPower: 50, stamina: 58, desc: "Vel 64 | Chute 50 | Resist 58" },
+      "Zagueiro": { speed: 50, kickPower: 58, stamina: 56, desc: "Vel 50 | Chute 58 | Resist 56" },
     };
 
     // Fundo decorativo

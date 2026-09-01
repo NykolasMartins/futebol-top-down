@@ -436,9 +436,9 @@ Object.assign(GameScene.prototype, {
     this.isReplaying = false;
     if (this.replayUI) this.replayUI.setAlpha(0);
     this.physics.world.resume();
-    this.cameras.main.setZoom(1);
+    Perspectiva.zoom(this.cameras.main, 1);
     this.cameras.main.stopFollow();
-    if (this.player) this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+    if (this.player) this.seguirCamera();
     this.replayBuffer = [];
     this.gameState = GameStates.PLAYING;
   },

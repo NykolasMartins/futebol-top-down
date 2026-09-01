@@ -49,6 +49,34 @@ Object.assign(GameScene.prototype, {
   registerDOMTeardown() {
     this.events.once("shutdown", () => this._teardownDOM());
     this.events.once("destroy", () => this._teardownDOM());
+    // A torcida é um loop contínuo no WebAudio: ninguém a recolhe sozinha, e
+    // ela seguiria tocando por cima do menu depois do apito final. Mesmo
+    // motivo do placar em DOM — o Phaser não sabe que isto existe.
+    this.events.once("shutdown", () => Som.pararTorcida());
+    this.events.once("destroy", () => Som.pararTorcida());
+  },
+
+  /**
+   * Nível do estádio. Chamado uma vez por segundo pelo relógio — é a cadência
+   * certa: torcida não reage a frame, reage a lance. Sobe quando a bola chega
+   * perto de uma área e quando o jogo está apertado no fim.
+   */
+  atualizarTorcida() {
+    if (!Som.torcida || !this.ball) return;
+    const meio = PITCH_X + PITCH_WIDTH / 2;
+    // 0 no meio de campo, 1 colado em qualquer um dos gols.
+    const perigo = Phaser.Math.Clamp(
+      Math.abs(this.ball.x - meio) / (PITCH_WIDTH / 2),
+      0,
+      1,
+    );
+    const decisivo =
+      this.isSecondHalf &&
+      this.timeLeft <= AI_BEHAVIOR.ENDGAME_SEC &&
+      Math.abs(this.scorePlayer - this.scoreOpponent) <= 1
+        ? 0.25
+        : 0;
+    Som.nivelTorcida(0.15 + perigo * 0.55 + decisivo, 1.5);
   },
 
   // === PLACAR DE TRANSMISSÃO ===
@@ -182,6 +210,7 @@ Object.assign(GameScene.prototype, {
     });
     floatingText.setOrigin(0.5, 0.5);
     floatingText.setDepth(50);
+    Perspectiva.reta(floatingText);
 
     this.tweens.add({
       targets: floatingText,
@@ -229,29 +258,89 @@ Object.assign(GameScene.prototype, {
     this.spawnImpactDust(this.ball ? this.ball.x : a.x, this.ball ? this.ball.y : a.y, 0xffffff);
   },
 
-  spawnImpactDust(x, y, color = 0xd8c08a) {
-    for (let i = 0; i < 7; i++) {
+  /**
+   * Nuvem de impacto. UMA função para todo pó do jogo — chute, quique, defesa,
+   * trave, carrinho, corrida — porque o que muda entre eles é NÚMERO, não
+   * comportamento: `forca` (0..1) manda na quantidade, no tamanho, na distância
+   * e na duração de uma vez só. Foi assim que a poeira de um toque de bola
+   * deixou de ser igual à de uma bomba.
+   *
+   * `angulo` faz a nuvem sair para um LADO (com `abertura` de cone): pó de
+   * chute sai contra o pé, grama de carrinho sai atrás do boneco. Sem ângulo,
+   * espalha em roda como antes.
+   */
+  spawnImpactDust(x, y, color = 0xd8c08a, opcoes = {}) {
+    if (typeof EfeitosVisuais !== "undefined" && !EfeitosVisuais.ligado("particulas"))
+      return;
+    const forca = Phaser.Math.Clamp(
+      opcoes.forca === undefined ? 0.35 : opcoes.forca,
+      0,
+      1,
+    );
+    const abertura = opcoes.abertura === undefined ? Math.PI * 2 : opcoes.abertura;
+    const quantos = Math.round(
+      FEEDBACK.PARTICULAS_MIN +
+        (FEEDBACK.PARTICULAS_MAX - FEEDBACK.PARTICULAS_MIN) * forca,
+    );
+
+    for (let i = 0; i < quantos; i++) {
       const particle = this.add.circle(
         x,
         y,
-        Phaser.Math.Between(2, 5),
+        Phaser.Math.Between(2, Math.round(3 + 4 * forca)),
         color,
         0.72,
       );
-      particle.setDepth(28);
-      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
-      const dist = Phaser.Math.Between(16, 44);
+      particle.setDepth(opcoes.depth === undefined ? 28 : opcoes.depth);
+      const base =
+        opcoes.angulo === undefined || opcoes.angulo === null
+          ? Phaser.Math.FloatBetween(0, Math.PI * 2)
+          : opcoes.angulo;
+      const angle = base + Phaser.Math.FloatBetween(-abertura / 2, abertura / 2);
+      const dist = Phaser.Math.Between(
+        Math.round(12 + 24 * forca),
+        Math.round(30 + 70 * forca),
+      );
       this.tweens.add({
         targets: particle,
         x: x + Math.cos(angle) * dist,
         y: y + Math.sin(angle) * dist,
         alpha: 0,
         scale: 0.25,
-        duration: 280,
+        duration: 240 + 240 * forca,
         ease: "Quad.easeOut",
         onComplete: () => particle.destroy(),
       });
     }
+  },
+
+  /**
+   * Pó de pé, todo frame: carrinho arranca grama enquanto desliza, e quem
+   * corre em velocidade máxima levanta poeira. É o feedback de ESFORÇO — sem
+   * ele, correr e andar são o mesmo desenho.
+   *
+   * O intervalo é por ENTIDADE, não global: dois carrinhos ao mesmo tempo
+   * dividiriam a mesma nuvem e o segundo pareceria não ter acontecido.
+   */
+  atualizarPoeiraDosPes(time) {
+    (this.allPlayers || []).forEach((e) => {
+      if (!e || !e.active || !e.body) return;
+      const v = e.body.velocity.length();
+      const correndo = e === this.player && v > (e.sprintSpeed || 260) * 0.85;
+      if (!e.isSliding && !correndo) return;
+      if (time < (e._proximoPo || 0)) return;
+      e._proximoPo =
+        time +
+        (e.isSliding ? FEEDBACK.POEIRA_CARRINHO_MS : FEEDBACK.POEIRA_CORRIDA_MS);
+
+      const ang = Math.atan2(e.body.velocity.y, e.body.velocity.x) + Math.PI;
+      this.spawnImpactDust(e.x, e.y + 10, e.isSliding ? 0x6ea84f : 0xd8c08a, {
+        forca: e.isSliding ? 0.5 : 0.18,
+        angulo: ang,
+        abertura: 0.9,
+        depth: 12,
+      });
+    });
   },
 
   updateTimer() {
@@ -261,10 +350,15 @@ Object.assign(GameScene.prototype, {
     if (this.timeLeft > 0) {
       this.timeLeft--;
       this.updateHUD(); // Use the DOM update function
+      this.atualizarTorcida();
     } else {
       if (!this.isSecondHalf) {
+        // Dois toques fecham o tempo; três encerram o jogo. É a convenção do
+        // campo, e é o que diz ao jogador qual dos dois acabou de acontecer.
+        Som.tocar("apito", { toques: 2 });
         this.startSecondHalf();
       } else {
+        Som.tocar("apito", { toques: 3, dur: 0.4 });
         this.endGame();
       }
     }
@@ -352,11 +446,11 @@ Object.assign(GameScene.prototype, {
     wrap.innerHTML = html;
     const el = wrap.firstElementChild;
 
-    this._pauseMenuDOM = this.add
-      .dom(0, 0, el)
-      .setOrigin(0, 0)
-      .setDepth(9000)
-      .setScrollFactor(0);
+    // A camada DOM também anda na matriz da câmera — sem a compensação o menu
+    // inteiro entra espremido junto com o campo.
+    this._pauseMenuDOM = Perspectiva.tela(
+      this.add.dom(0, 0, el).setOrigin(0, 0).setDepth(9000).setScrollFactor(0),
+    );
 
     // Eventos
     el.addEventListener("click", (e) => {
@@ -486,11 +580,11 @@ Object.assign(GameScene.prototype, {
     wrap.innerHTML = html;
     const el = wrap.firstElementChild;
 
-    this._pauseMenuDOM = this.add
-      .dom(0, 0, el)
-      .setOrigin(0, 0)
-      .setDepth(9000)
-      .setScrollFactor(0);
+    // A camada DOM também anda na matriz da câmera — sem a compensação o menu
+    // inteiro entra espremido junto com o campo.
+    this._pauseMenuDOM = Perspectiva.tela(
+      this.add.dom(0, 0, el).setOrigin(0, 0).setDepth(9000).setScrollFactor(0),
+    );
 
     el.addEventListener("click", (e) => {
       if (e.target.id === "sub-cancel" || e.target.closest("#sub-cancel")) {
@@ -542,6 +636,7 @@ Object.assign(GameScene.prototype, {
       .setOrigin(0.5)
       .setScrollFactor(0)
       .setDepth(9500);
+    Perspectiva.tela(flashText);
 
     this.tweens.add({
       targets: flashText,
@@ -588,15 +683,10 @@ Object.assign(GameScene.prototype, {
       '<span class="pui-pause-title">⚙ CONFIGURAÇÕES</span>' +
       "</div>" +
       '<div style="padding:16px;">' +
-      '<div class="pui-config-row">' +
-      "<div>" +
-      '<div class="pui-config-label">SOM</div>' +
-      '<div class="pui-config-hint">Efeitos sonoros do jogo</div>' +
-      "</div>" +
-      '<div class="pui-toggle ' +
-      (s.soundEnabled ? "on" : "") +
-      '" id="toggle-sound"></div>' +
-      "</div>" +
+      // O interruptor de SOM está lá embaixo, com o catálogo do `Som`. O que
+      // existia aqui mexia em `this.sound.mute` do Phaser, que nunca teve som
+      // nenhum para calar (`noAudio: true`) — dois interruptores de som na
+      // mesma tela, um deles decorativo.
       '<div class="pui-config-row">' +
       "<div>" +
       '<div class="pui-config-label">MINIMAPA</div>' +
@@ -610,10 +700,14 @@ Object.assign(GameScene.prototype, {
       // então efeito novo aparece aqui e no menu sem tocar nas duas telas.
       '<div class="pui-config-sep">EFEITOS VISUAIS</div>' +
       EfeitosVisuais.linhasHtml() +
+      '<div class="pui-config-sep">SOM</div>' +
+      Som.linhasHtml() +
+      '<div class="pui-config-sep">JOGO</div>' +
+      Dificuldade.linhasHtml() +
       '<div class="pui-config-row">' +
       "<div>" +
       '<div class="pui-config-label">CONTROLES</div>' +
-      '<div class="pui-config-hint">WASD: Mover &nbsp;|&nbsp; SHIFT: Sprint<br>Clique Esq: Chute &nbsp;|&nbsp; Clique Dir: Passe<br>ESPAÇO: Bote &nbsp;|&nbsp; Q: Habilidade &nbsp;|&nbsp; ESC: Pausa</div>' +
+      '<div class="pui-config-hint">WASD: Mover &nbsp;|&nbsp; SHIFT: Sprint<br>Clique Esq: Chute &nbsp;|&nbsp; Clique Dir: Passe<br>ESPAÇO: Bote &nbsp;|&nbsp; SHIFT+ESPAÇO: Carrinho<br>Z: Câmera (bola/jogador) &nbsp;|&nbsp; Q: Habilidade &nbsp;|&nbsp; ESC: Pausa</div>' +
       "</div>" +
       "</div>" +
       '<div style="display:flex;gap:8px;margin-top:12px;">' +
@@ -627,11 +721,11 @@ Object.assign(GameScene.prototype, {
     wrap.innerHTML = html;
     const el = wrap.firstElementChild;
 
-    this._pauseMenuDOM = this.add
-      .dom(0, 0, el)
-      .setOrigin(0, 0)
-      .setDepth(9000)
-      .setScrollFactor(0);
+    // A camada DOM também anda na matriz da câmera — sem a compensação o menu
+    // inteiro entra espremido junto com o campo.
+    this._pauseMenuDOM = Perspectiva.tela(
+      this.add.dom(0, 0, el).setOrigin(0, 0).setDepth(9000).setScrollFactor(0),
+    );
 
     el.addEventListener("click", (e) => {
       if (e.target.id === "config-back" || e.target.closest("#config-back")) {
@@ -639,15 +733,13 @@ Object.assign(GameScene.prototype, {
         return;
       }
 
-      // Interruptor de efeito: o próprio módulo trata e persiste.
+      // Interruptores de efeito e de som: cada módulo trata e persiste o seu.
       if (EfeitosVisuais.tratarClique(e.target)) return;
-
-      if (e.target.id === "toggle-sound") {
-        s.soundEnabled = !s.soundEnabled;
-        e.target.classList.toggle("on", s.soundEnabled);
-        if (this.sound) {
-          this.sound.mute = !s.soundEnabled;
-        }
+      if (Som.tratarClique(e.target)) return;
+      // Trocar de dificuldade no meio da partida vale a partir do PRÓXIMO jogo:
+      // as fichas dos bonecos em campo já foram calculadas no `create`.
+      if (Dificuldade.tratarClique(e.target)) {
+        this._openConfigMenu();
         return;
       }
 
@@ -699,6 +791,7 @@ console.assert(
   [
     "showFloatingText",
     "spawnImpactDust",
+    "atualizarPoeiraDosPes",
     "updateTimer",
     "_openPauseMenu",
     "_closePauseMenu",
@@ -711,6 +804,7 @@ console.assert(
     "registerDOMTeardown",
     "buildScoreboardHTML",
     "refreshScoreboard",
+    "atualizarTorcida",
   ].every((m) => typeof GameScene.prototype[m] === "function"),
   "GameScene.hud.js: método de HUD faltando no prototype",
 );
@@ -814,4 +908,68 @@ console.assert(
     return limpo;
   })(),
   "GameScene.hud.js: _teardownDOM deixou DOM órfão na tela",
+);
+
+// =============================================================================
+// Check: a nuvem tem de RESPONDER à força, e obedecer ao interruptor. Nuvem de
+// tamanho fixo é o defeito que este arquivo existe para não ter — e ela é
+// difícil de notar jogando, porque "saiu poeira" parece certo em qualquer caso.
+// =============================================================================
+console.assert(
+  (() => {
+    const cenaFalsa = () => {
+      const cena = {
+        criadas: [],
+        tweens: { alvos: [], add(cfg) { cena.tweens.alvos.push(cfg); } },
+        add: {
+          circle(x, y, r) {
+            const o = { x, y, r, setDepth: () => o };
+            cena.criadas.push(o);
+            return o;
+          },
+        },
+      };
+      cena.spawnImpactDust = GameScene.prototype.spawnImpactDust;
+      return cena;
+    };
+
+    const conta = (forca) => {
+      const c = cenaFalsa();
+      c.spawnImpactDust(0, 0, 0xffffff, { forca });
+      return c.criadas.length;
+    };
+
+    const fraca = conta(0);
+    const media = conta(0.5);
+    const forte = conta(1);
+
+    // Cone: com abertura zero e ângulo zero, TODA partícula vai para +X.
+    const cone = cenaFalsa();
+    cone.spawnImpactDust(100, 100, 0xffffff, {
+      forca: 1,
+      angulo: 0,
+      abertura: 0,
+    });
+    const soParaFrente = cone.tweens.alvos.every(
+      (t) => t.x > 100 && Math.abs(t.y - 100) < 1e-9,
+    );
+
+    // Interruptor desligado: nenhuma partícula, nem uma.
+    const antes = EfeitosVisuais.estado.particulas;
+    EfeitosVisuais.estado.particulas = false;
+    const desligada = conta(1);
+    EfeitosVisuais.estado.particulas = antes;
+
+    return (
+      fraca === FEEDBACK.PARTICULAS_MIN &&
+      forte === FEEDBACK.PARTICULAS_MAX &&
+      fraca < media &&
+      media < forte &&
+      soParaFrente &&
+      desligada === 0 &&
+      // E o efeito tem interruptor na tela de configurações.
+      EfeitosVisuais.CATALOGO.some((e) => e.id === "particulas")
+    );
+  })(),
+  "GameScene.hud.js: a nuvem de impacto não acompanha a força (ou ignora o interruptor)",
 );

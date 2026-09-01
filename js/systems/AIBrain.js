@@ -41,7 +41,15 @@ class AIBrain {
   static shouldThink(entity, delta) {
     entity.decisionTimer = (entity.decisionTimer || 0) - delta;
     if (entity.decisionTimer > 0) return false;
-    const base = AI_BEHAVIOR.DECISION_INTERVAL_MS;
+    // A dificuldade estica ou encolhe o intervalo: pensar mais vezes por
+    // segundo É a IA ficar melhor, sem tocar em nenhuma decisão. Só o time do
+    // ADVERSÁRIO — deixar o time do usuário mais burro no fácil seria punir
+    // quem escolheu o modo fácil.
+    const fator =
+      typeof Dificuldade !== "undefined" && !entity.isPlayerTeam
+        ? Dificuldade.fator("decisao")
+        : 1;
+    const base = AI_BEHAVIOR.DECISION_INTERVAL_MS * fator;
     entity.decisionTimer = base * (0.75 + Math.random() * 0.5);
     return true;
   }
