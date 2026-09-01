@@ -43,6 +43,8 @@ JOGO_FINAL/
     │
     ├── systems/                  ← SISTEMAS TRANSVERSAIS (instanciados em window ou direto na cena)
     │   ├── UIHelper.js           ← Classe utilitária ESTÁTICA para DOM: createDOMButton/createDOMPanel/createDOMModal/createDOMNotification etc.
+    │   ├── Som.js               ← Dono ÚNICO do áudio. Sintetiza tudo no WebAudio
+    │   │                            (zero arquivo), contexto criado no 1º gesto. Ver seção 17.
     │   ├── EfeitosVisuais.js     ← Dono ÚNICO dos efeitos (CRT, grão, riscos, curvatura da UI, tremor).
     │   │                            Estado + aplicação + persistência em localStorage. O CATALOGO gera os
     │   │                            interruptores das DUAS telas de config (menu e pausa).
@@ -261,6 +263,7 @@ Score-based decision:
 | Clique Esquerdo segurar | Carregar força de chute |
 | Clique Esquerdo soltar | Chutar direção do mouse |
 | Clique Direito curto | Passe inteligente → aliado mais apropriado |
+| Z | **Câmera**: alterna entre seguir o jogador e seguir a bola |
 | Setas ESQ/DIR | Trocar jogador (swap para mais próximo da bola) |
 | ESC / P / Gamepad Start | Pausar |
 | Gamepad A / B / X / Y | Bote / Passe / Chute / Trocar |
@@ -894,7 +897,10 @@ a bola é o anfitrião.
 - **Arte:** `shooting/north` só tem frames 000, 003 e 004. `BASE_KICK_MISSING`
   cobre o buraco com o frame 000 e evita o 404.
 - **Check de paleta** vira aviso, não asserção — ele valida a arte de origem.
-- **Sem áudio:** zero `load.audio`; `audio: { noAudio: true }` no `main.js`.
+- **Áudio sem arquivo nenhum.** Ver seção 17. Zero `load.audio` continua
+  valendo — o som é sintetizado, não carregado.
+- **Sem locução, sem música.** Um narrador exigiria banco de voz (arquivo), que
+  é justamente o que a síntese evita.
 - **Sem impedimento — de propósito.** O jogo é 5v5 de quadra (fixo/ala/pivô) e
   futsal não tem impedimento. Não é pendência: é a regra do esporte.
 - **Expulsão não vale em LAN.** O convidado endereça boneco por `lado_POSICAO`
@@ -967,3 +973,585 @@ lê `bot.tactic`; tática ausente ou desconhecida cai no 3-1. `GameScene`
 publica `playerTactic`/`enemyTactic` e é de lá que sai o `tactic` de todo
 boneco. A troca fica no **menu de pausa** (botão TÁTICA, cicla as três) e vale
 para quem está em campo naquele momento — a substituição troca gente do time.
+
+---
+
+## 17 — ÁUDIO: síntese em runtime, zero arquivo
+
+`js/systems/Som.js` é o dono único: gera, toca, persiste a escolha e desenha os
+interruptores das DUAS telas de configuração (mesmo papel do `EfeitosVisuais`,
+mesmo formato de save sanitizado no load).
+
+**Nenhum asset de áudio entra no projeto.** Cada som é montado com oscilador e
+ruído no WebAudio, na hora. Não é preciosismo: é o que mantém a regra do
+projeto (sem bundler, sem dependência, deploy estático) e o repositório leve.
+
+**A arquitetura que importa: som é FUNÇÃO PURA de `(ctx, destino, t0, opções)`.**
+A receita não sabe se está tocando na placa de som ou sendo renderizada num
+`OfflineAudioContext` — e é por isso que o check do boot mede exatamente o que o
+jogador ouve, em vez de medir uma maquete. Receita que leia `Som.ctx` por dentro
+sai do alcance do check.
+
+**O contexto nasce no PRIMEIRO GESTO.** Regra do navegador, não escolha nossa:
+criar no boot é o que gerava "The AudioContext was not allowed to start". Os
+listeners ficam no fim do `main.js`, FORA do `READY` (o gesto pode chegar antes
+do jogo montar) e cobrem `pointerdown`/`mousedown`/`touchstart`/`keydown` —
+nem toda origem de clique emite `pointerdown`. Antes disso, `Som.tocar()` é
+silencioso e barato: quem chama nunca pergunta se já destravou.
+
+**O Phaser continua com `audio: { noAudio: true }`.** Não há `load.audio` para
+ele gerenciar; ligar `false` só criaria um segundo contexto, vazio.
+
+### Receitas (`Som.RECEITAS`)
+`chute` (peso pela força do chute), `passe`, `trave` (dois parciais desafinados,
+metal), `rede`, `defesa` (luva), `raspagem` (bote e carrinho, o carrinho mais
+longo e sujo), `apito` (`toques`: 1 falta, 2 intervalo, 3 fim — a "ervilha" é um
+LFO de 28Hz sobre o ganho) e `cartao` (dois bipes; o vermelho desce em vez de
+subir).
+
+Disparadas dos pontos que já existiam, sem sistema novo: `kickBallFrom` (ponto
+único de todo chute e passe, como o `kickAnimUntil`), o colisor da trave em
+`createPost`, `Goalkeeper.catchBall`, `Player.iniciarBote`, `chamarFalta`,
+`cartaoPor`, `handleGoal` e `updateTimer`.
+
+### Torcida
+Uma fonte de ruído em loop com passa-baixa: subir o nível abre o filtro E o
+ganho, que é o que faz o estádio "acordar" em vez de só ficar mais alto.
+`atualizarTorcida()` roda no relógio (1x por segundo — torcida reage a lance,
+não a frame) e o nível sai da distância da bola ao gol mais o aperto do fim de
+jogo. Gol chama `explodirTorcida(favoravel)`: sobe seco e volta devagar; gol
+sofrido faz menos barulho, e é isso que diferencia o estádio de um lado do outro.
+
+Duas armadilhas, ambas do fato de ser um LOOP e não um disparo:
+- **Ninguém a recolhe.** Sem `pararTorcida()` no `registerDOMTeardown` ela toca
+  por cima do menu depois do apito final — mesmo caso do placar em DOM.
+- **`_emPartida`** separa "estou num jogo" de "estou no menu". Sem essa marca,
+  religar o interruptor na tela de configuração do MENU acendia o estádio ali.
+
+### Medido
+Régua renderizada offline, picos já no volume mestre: apito 0.44, chute 0.35,
+trave 0.31, rede 0.22, passe 0.16, cartão 0.15, defesa 0.14, raspagem 0.12.
+Nenhuma muda, nenhuma passa de 1.0 (o teto do digital).
+
+---
+
+## 18 — CARREIRA LONGA: mundo que envelhece, contrato, seleção e história
+
+### O mundo envelhece — `js/systems/Elenco.js`
+`REAL_ROSTERS` virou ponto de PARTIDA, não a verdade do jogo. Sem isto os
+mesmos 504 jogadores ficavam com o mesmo rating para sempre: a temporada 5 era
+idêntica à 1 e o único que evoluía era o usuário.
+
+**A porta é uma só: `getTeamRoster()`** (RealRosters.js) pergunta ao `Elenco`
+antes de cair no banco. GameScene, CareerMode, mercado e `MatchSimulator`
+continuam chamando o que já chamavam e passam a ver o mundo vivo — `starterRating`
+foi o único que lia `REAL_ROSTERS` cru e por isso deixava a força dos clubes
+congelada.
+
+- **Idade é derivada do `id`** (FNV-1a, a mesma técnica da aparência) e
+  enviesada pelo rating: quem tem 84+ nasce entre 25 e 32, porque craque de 88
+  com 19 anos não existe. Da primeira virada em diante ela é ESTADO e vai para
+  o save — deixa de ser derivação.
+- **Curva por faixa etária** (`Elenco.CURVA`): garoto explode, veterano cai, o
+  meio oscila. Artilheiro do ano (≥ 8 gols nas estatísticas globais) ganha
+  `BONUS_ARTILHEIRO` — é o único acoplamento entre o que foi jogado e o que o
+  mundo vira.
+- **Aposentadoria** aos 39 sempre, e antes disso com chance que cresce a partir
+  dos 34 (rating alto segura mais um ano). Quem sai é substituído por um garoto
+  da base NA MESMA POSIÇÃO: o elenco não encolhe e o clube não perde o goleiro.
+- **Nome da cria** sai da recombinação dos nomes que já existem no banco. Um
+  dicionário de nomes por país seria dado novo para manter, e o resultado soa
+  igual.
+- **`_reequilibrar()` segura a deriva.** Medido sem ele: a média do mundo caía
+  de 79.9 para 73.8 em dez temporadas — a curva é líquida negativa numa
+  população madura e o garoto entra abaixo da média, então o usuário subia e a
+  liga inteira derretia. Com ele: 79.8 → 78.8, e o Flamengo segue 82.6 → 82.8.
+  Um ponto por temporada, no máximo, mirando a média ORIGINAL do clube: corrige
+  o mundo sem apagar o envelhecimento de ninguém.
+
+O mundo vivo vai inteiro para o save (`_elencoMundo`, ~50KB de um save de 85KB):
+a `worldSeed` regenera calendário e chaveamento, mas não regenera idade e
+rating já envelhecidos.
+
+### Contrato — o relógio que faltava no mercado
+`contractYears` desce uma vez por ano em `_virarContrato()`. No penúltimo ano
+vira aviso; no fim do vínculo o mercado abre sozinho. É isso que transforma
+"recebo proposta aleatória" em decisão. A duração viaja PLANA na proposta
+(`contractYears` em `_buildOffer`, clube tier 4+ amarra por mais tempo) e
+assinar zera o relógio — inclusive na renovação, que é o que o jogador está
+comprando ao aceitar.
+
+### Seleção nacional — convocação simulada
+`_janelaDeSelecao()` no fim da temporada: nota (`overall()`) acima de
+`CAREER_BASE.NATIONAL_CALL_RATING` convoca, e a janela rende jogos, gols
+proporcionais ao ritmo no clube, e reputação.
+
+**As partidas são SIMULADAS, e isso é escolha, não preguiça:** um terceiro tipo
+de compromisso no calendário obrigaria a mexer no literal `type`
+("brasileirao"/"copa"), que as cenas comparam — risco alto para retorno pequeno.
+Quando houver apetite, o caminho é um `type` novo varrendo `PreGameScene`,
+`EndGameScene` e `CareerMode`.
+
+### Prêmios e história
+`_premiosDaTemporada()` sai dos números que o mundo JÁ grava (`topScorers`,
+`leagueTable`) — nada de placar paralelo. Artilheiro exige gol no ano (liderar
+com 0 é tabela vazia, não artilharia), Craque exige título + top 3, Revelação é
+uma vez na vida e só até os 21.
+
+`history` guarda uma linha por temporada (clube, posição, jogos, gols,
+assistências, nota, títulos DAQUELE ano e a janela de seleção) e aparece no
+`PlayerProfileScene`, na coluna que já rolava — sem modal novo e sem handler
+novo. O que faltava àquela tela era memória, não navegação.
+
+**Ordem importa em `startNewSeason()`:** `_fecharTemporada()` é a PRIMEIRA
+linha, porque prêmios, história, seleção e contrato leem as estatísticas da
+temporada — e as linhas seguintes zeram exatamente esses números.
+`_envelhecerMundo()` vem depois de `this.world = null` e antes de recriar tabela
+e estatísticas, que leem rating de elenco.
+
+---
+
+## 19 — UX: avisos que não interrompem
+
+**O problema medido:** cada notificação de carreira era um MODAL de tela cheia
+com botão OK, mostrado um de cada vez e encadeado no fechamento do anterior.
+Avançar um dia com três avisos custava três cliques e três esperas, com a tela
+inutilizável no meio — e o terceiro aviso ninguém lia.
+
+**Agora:** `UIHelper.toast(scene, msg, tipo)` e `UIHelper.toastFila(scene, itens)`.
+Pilha no canto inferior direito, não bloqueante (o jogo segue clicável por
+baixo), cada card sai sozinho e o clique só ACELERA a saída. O tempo é
+proporcional ao texto (2,5s a 7s): aviso curto não ocupa a tela, aviso longo dá
+tempo de ser lido. Teto de 4 cards — acima disso vira parede de texto e não se
+lê nenhum, então o mais velho sai primeiro. A cor da borda esquerda é o tipo
+(salário, troféu, transferência, notícia, erro), para reconhecer sem ler.
+
+`PreGameScene._showPendingNotifications()` drena a fila INTEIRA de uma vez, com
+260ms entre um card e outro — nascendo no mesmo frame viram um bloco só.
+
+Três armadilhas da camada DOM, todas com o mesmo sintoma enganoso:
+- **`pointer-events: none` precisa de `!important`.** `main.css` tem
+  `#game-container > div * { pointer-events: auto }`, especificidade 1-0-1
+  contra 0-1-0 da classe. Sem isso a camada — invisível e do tamanho do canvas —
+  engolia todo clique enquanto houvesse aviso na tela, e parecia que o jogo
+  travava até o toast sumir. Só o CARD volta a `auto`, que é o que o dispensa.
+- **O Phaser escreve `display` inline** no elemento do `add.dom`, e inline ganha
+  da folha de estilo: o `display:flex` da camada virava `block` e todo aviso
+  ancorava no canto superior esquerdo. O layout foi para um FILHO
+  (`.pui-toast-stack`), que o Phaser não toca.
+- **`setDepth` não ordena camada DOM.** `main.css` crava `z-index: 1000
+  !important` em todas, então quem decide é a ordem no DOM — a pilha é reanexada
+  ao fim a cada aviso, senão nasce ATRÁS do painel opaco (a fila é despejada
+  antes de a UI da cena ser montada).
+
+**Outras melhorias da mesma leva:**
+- **ESC e clique fora fecham o modal**, nos nove modais do jogo de uma vez: o
+  conserto é no `createDOMModal`, não em cada tela.
+- **Botão tem estado de clique** (`:active` afunda o botão e encolhe a sombra).
+  O hover já existia; o pressionado não, e no toque o botão parecia travado.
+- **`createDOMNotification` foi APAGADO** junto com o último chamador, e o toast
+  ad-hoc que a `PreGameScene` montava no `document.body` também: um lugar só
+  para avisar o jogador.
+
+---
+
+## 20 — DISCIPLINA, LESÃO E SELEÇÃO JOGÁVEL
+
+### O que acontece em campo cobra fora dele
+Até aqui o cartão morria no apito final e dava para jogar todo jogo com o fôlego
+no chão. Agora a partida devolve uma SÚMULA e ela pesa na temporada.
+
+A súmula viaja dentro de `matchStats` de propósito: esse objeto já é repassado
+inteiro por `PenaltyShootoutScene` e `EndGameScene`, e um campo novo solto no
+`data` seria mais um a esquecer de repassar (já aconteceu neste projeto).
+`GameScene.endGame()` preenche `cartoesAmarelos`, `cartaoVermelho` e
+`faltasSofridas` — "usuário" é o boneco no comando na hora, que é o que ele fez
+com a bola no pé dele.
+
+- **Suspensão:** `DISCIPLINE.YELLOWS_PER_BAN` (3) amarelos custam um jogo, e o
+  contador ZERA ao gerar a suspensão — senão o 4º amarelo suspenderia de novo e
+  o 5º outra vez. Vermelho custa `RED_BAN_MATCHES` (2) na hora.
+- **Lesão:** risco = pancada tomada + desgaste (`INJURY_PER_FOUL` por falta
+  sofrida, carrinho conta dobrado, mais o quanto o fôlego caiu abaixo de
+  `FIT_SAFE`), com teto de 35%. Medido: partida tranquila 0%, normal 6%, pesada
+  25%, brutal 31%, com ~10 dias de recuperação.
+- **A porta é `getLineupStatus()`.** Suspenso e lesionado devolvem
+  `not_related` ANTES de qualquer conta de forma — a função que já decidia se o
+  jogador entra passou a ter dois motivos a mais, em vez de uma checagem nova
+  espalhada pelas telas.
+- **A suspensão é cumprida pela partida PERDIDA**, em `_pesarPartidaNoCorpo()`,
+  que roda no registro de TODA partida do usuário — inclusive a que ele não
+  jogou. Quem não entrou não leva cartão nem se machuca.
+- Lesionado **descansa mas não treina** (mesmo critério do fôlego no chão), e a
+  recuperação anda no relógio, dentro do `advanceDay()`.
+
+### Seleção nacional jogável
+`type: "selecao"` é o TERCEIRO literal estrutural do schedule (havia
+"brasileirao" e "copa") e as cenas o comparam: mexer nele exige varrer
+`PreGameScene` e `EndGameScene` junto — foi o que esta entrega fez.
+
+- **`NATIONAL_TEAMS`** (LeaguesDB.js): uma seleção por país com liga jogável. A
+  chave (`selecao_brasil`) é a mesma no `TEAMS_DB` (uniforme) e no elenco vivo.
+  **Sem entrada no TEAMS_DB os dois times entram de vermelho**, calados, pelo
+  fallback do `buildKitAtlas`.
+- **A seleção convoca por NACIONALIDADE, não por liga.** `Elenco.selecao(id)`
+  varre o mundo inteiro e filtra pelo país do JOGADOR: o Arrascaeta joga no
+  Flamengo e é uruguaio, o Haaland joga na Inglaterra e é norueguês. Ler a liga
+  do país convocava o estrangeiro que joga lá e deixava de fora o brasileiro
+  que joga na Europa — que é exatamente quem uma seleção chama. Pega o melhor
+  goleiro e os 6 melhores de linha. Assim a
+  seleção envelhece junto com o mundo, e quem subiu da base entra sozinho no
+  ano seguinte. A convocação é cache: `virarTemporada` a descarta
+  (`limparSelecoes`) e ela NÃO envelhece — é cópia de gente que já envelhece no
+  clube, e envelhecer as duas somaria dois anos por temporada ao convocado.
+  Por ser derivada, também não vai para o save.
+- **De onde sai a nacionalidade** (`getPlayerNationality`, LeaguesDB.js): o
+  campo explícito no jogador vence; depois a curadoria `PLAYER_NATIONALITY`
+  (RealRosters.js, ~209 jogadores de rating 81+, que é a faixa que uma
+  convocação alcança); e só então a derivação por hash do id, enviesada pelo
+  país do clube (`NATIVE_SHARE` 70%). Ausência da curadoria NÃO é afirmação de
+  que o jogador seja do país onde joga — é palpite estável, não dado.
+- **`nationality` do USUÁRIO é congelada na primeira vez** e salva: derivar do
+  clube toda vez faria o jogador trocar de seleção junto com a transferência.
+- **`_fonteDeClubes()` separa "mundo existe" de "mundo tem clube".** A
+  convocação fica em cache DENTRO de `Elenco.mundo`, então a primeira seleção
+  montada criava o objeto e a segunda lia um mundo só de seleções — e voltava
+  vazia. A primeira convocação do jogo funcionava; a segunda, não.
+- **`_agendarSelecao()`** insere `CAREER_BASE.NATIONAL_WINDOWS` (4) datas FIFA
+  em dias livres, sempre com folga dos dois lados — a seleção não empurra jogo
+  de clube, que é o calendário de verdade do mundo. Medido: 4 datas, zero
+  colisão.
+- **A régua é `lastFixtureDay()`, não um número.** Com 320 chutado, a última
+  data caía DEPOIS do fim da temporada (~214 dias): um compromisso que nunca
+  chega deixava `hasRemainingMatches()` eternamente true, escondia o botão de
+  simular o resto do ano e fazia a tela anunciar "próximo jogo" de um jogo
+  inexistente. Data que ainda escorregue para fora do ano é descartada.
+- **Data FIFA não jogada é marcada quando o dia passa** (`_simulateWorldDay`):
+  ela não existe no calendário do MUNDO, então ninguém mais a resolveria. E
+  faltar a ela NÃO cobra multa nem reputação — isso é do clube.
+- No jogo, `homeTeam` aponta para a seleção: é o que troca elenco E uniforme no
+  `GameScene` (fora da exibição ele vinha só do `careerMode`).
+- **`recordSelecaoMatch()`** não toca tabela nem artilharia da liga: conta
+  caps, gols e desgaste. E `_janelaDeSelecao()` (fim de ano) passou a somar
+  apenas os amistosos NÃO jogados — sem esse desconto os caps contariam duas
+  vezes.
+- `clubLabel()` e `clubAcronym()` aprenderam as seleções, senão a tela mostraria
+  "selecao_brasil" e o placar "SEL" nos dois lados.
+
+---
+
+## 21 — DIFICULDADE, COPA DO MUNDO E SLOTS DE SAVE
+
+### Dificuldade (`js/systems/Dificuldade.js`)
+Três perfis, e a regra é **fator, nunca `if`**: quem consome pergunta
+`Dificuldade.fator(chave)` e multiplica um número que já existia. Perfil novo é
+uma linha na tabela, não uma varredura pelo jogo.
+
+| fator | onde entra | efeito |
+|---|---|---|
+| `adversario` | rating do rival, antes do clamp, no `create` | tudo que a entidade deriva acompanha de uma vez |
+| `decisao` | `AIBrain.shouldThink` | intervalo entre decisões — MENOR é mais esperto |
+| `goleiro` | `checkCollisions` | alcance do goleiro |
+
+`decisao` e `goleiro` valem **só para o lado adversário**: no fácil, deixar o
+time do usuário mais burro seria punir quem escolheu o fácil.
+
+Medido numa partida real: rival com atributo 61.6 no fácil contra 75.6 no
+difícil (base 0.952 → 1.048, sprint 1.957 → 2.214), com o aliado intocado.
+
+De quebra, dois números cravados no `checkCollisions` (48/90 de alcance e 45 de
+distância) voltaram a sair de `GOALKEEPER` — as constantes existiam ali sem
+ninguém ler, que é o clássico deste projeto.
+
+### Copa do Mundo
+A cada `MUNDIAL.A_CADA` (4) temporadas, as datas FIFA deixam de ser amistoso e
+viram mata-mata entre as seleções.
+
+**O chaveamento mora no `CareerMode`, e isso é deliberado.** O invariante que
+proíbe bracket local vale para copa de CLUBE — aquilo é `world.season`, onde as
+seleções não existem, não têm tabela e não recebem vaga continental. Domínio
+diferente, dono diferente.
+
+- Semeadas por força de elenco, completadas com BYE até a potência de 2 — **um
+  BYE por confronto**, nunca empilhados (empilhado, meia chave nasce vazia e
+  alguém chega à final sem jogar).
+- O adversário de cada fase só existe quando a anterior fecha: a entrada do
+  schedule nasce com `opponentId: null` e `getSelecaoOpponent()` resolve no dia,
+  pela chave.
+- `recordSelecaoMatch` anda a chave: grava o jogo do usuário, simula os outros
+  com o `MatchSimulator` e monta a fase seguinte. Eliminado, as datas restantes
+  são marcadas como jogadas — senão o jogo pediria uma semifinal sem ele.
+- `MatchSimulator` carrega DEPOIS do `CareerMode`: a simulação dos outros
+  confrontos tem fallback para o instante do boot, senão o check do arquivo
+  quebra num `ReferenceError`.
+
+Medido: 6 seleções → 4 confrontos com 2 BYEs distribuídos, Quartas → Semifinal
+→ Final, campeão com troféu e prêmio; perdendo, o usuário sai e a chave segue.
+
+### Slots de save
+Havia UMA chave no `localStorage`: começar carreira nova apagava a anterior sem
+aviso e sem volta. Agora são três (`CareerMode.SLOTS`), e o **slot 1 continua na
+chave antiga** — quem já tinha carreira não perde nada ao atualizar.
+
+`chaveDoSlot()`, `resumoDosSlots()`, `usarSlot()` e `apagarSlot()` são estáticos
+e o slot ativo vive no `localStorage`, para sobreviver ao recarregar. No menu,
+CONTINUAR e NOVA CARREIRA abrem a mesma lista; sobrescrever um slot ocupado
+pede um segundo clique no próprio botão, que passa a dizer o nome que vai
+apagar.
+
+---
+
+## 22 — SIMULAR A TEMPORADA É JOGÁ-LA
+
+Até aqui, "simular até o fim da temporada" tratava cada partida do usuário como
+uma FALTA: multa, -20 de reputação e zero gol, zero assistência, zero XP. O ano
+inteiro passava e o jogador não existia nele.
+
+Agora o usuário entra em campo. `_resolverPartidaDoUsuario(entrada)`:
+
+1. o placar sai do MESMO `simulateMatch` dos jogos de fundo;
+2. a participação dele é sorteada **sobre esse placar** — para cada gol do time,
+   ele marcou, assistiu, ou foi coisa de companheiro. É o que amarra o número à
+   partida: com 1x0 não há como ele marcar três, defeito de qualquer fórmula que
+   sorteie gols do nada;
+3. o resultado entra pelo **mesmo caminho de uma partida jogada**
+   (`recordMatch`/`recordCopaMatch`) — então stats, artilharia, XP, nível,
+   condição, reputação, cartão e lesão saem de graça, sem nada reimplementado.
+
+A fatia por posição é a única coisa que a posição decide (atacante 0.45, meia
+0.28, fixo 0.12), corrigida pela nota do jogador; reserva entra no 2º tempo e
+tem metade das chances. O sorteio usa o PRNG do mundo — a mesma `worldSeed`
+reproduz a mesma temporada, artilharia inclusive.
+
+**Três defeitos que só apareceram ao medir:**
+- **Lesão não curava.** `injuryDays` só andava no `advanceDay`, e o
+  `simulateUntil` tem laço próprio: quem se machucava no meio do ano ficava
+  `not_related` até dezembro. Um atacante 85 terminava com 0 gol e reputação 0.
+- **Sem descanso.** O jogador automático não clica em "descansar": com os mesmos
+  +3 por dia ele terminava exausto e reserva. Dia livre em temporada simulada
+  agora recupera `CAREER_BASE.SIM_REST_PER_DAY`.
+- **Nota fixa em 6.0** punia todo mundo: metade das partidas caía abaixo de 6 e
+  a reputação ia a zero. A base agora acompanha a qualidade do jogador.
+
+Medido depois dos três (uma temporada cheia, ~35 jogos):
+
+| jogador | gols | assistências | artilharia |
+|---|---|---|---|
+| ATACANTE 85 | 21 | 3 | 1º |
+| MEIA 78 | 15 | 10 | 2º |
+| ATACANTE 72 | 9 | 4 | 29º |
+| FIXO 70 | 5 | 8 | 67º |
+
+**Fica de fora, de propósito:** a multa por falta continua valendo para quem
+PULA o dia no `advanceDay` tendo jogo — ali ele escolheu não jogar. Simular a
+temporada é outra coisa.
+
+---
+
+## 23 — PROGRESSÃO: começar fraco, subir devagar
+
+Três mudanças que só fazem sentido juntas.
+
+**O jogador começa em ~56 de overall**, não em ~70. `CAREER_BASE.START_*` e as
+bases por posição da `CharacterCreationScene` desceram na mesma proporção — a
+forma de cada posição continua (o atacante chuta, o lateral corre), o que mudou
+é o ponto de partida. Antes ele nascia a cinco pontos da convocação para a
+Seleção e a carreira não tinha para onde subir.
+
+> `resetDefaults` cravava `68/68/72` enquanto `CAREER_BASE.START_*` existia ao
+> lado sem ninguém ler. Mesmo clássico da casa — a constante era decoração.
+
+**Nível custa mais a cada nível:** `XP_BASE + (nível − 1) × XP_POR_NIVEL`
+(100 e 45). Era 100 fixo, e uma temporada rendia ~29 níveis — mais pontos de
+skill do que a árvore inteira. Agora uma temporada bem jogada rende ~10-15.
+A porta é `xpParaSubir()`: as quatro barras de XP do jogo liam `/100` cravado e
+continuariam mentindo.
+
+**Skills em mais degraus, cada um menor:** `SKILL_ATTR` (constants.js) define
+ganho e teto num lugar só — 12 níveis de +1/+1/+2 no lugar de 5 de +2/+2/+5.
+O total continua parecido; o que muda é que a subida tem passos. O número
+aparecia no texto do card E no clique que aplica: mudar um sem o outro fazia a
+tela prometer uma coisa e entregar outra.
+
+**Avançar o dia com jogo agora simula a partida COM o jogador** (`advanceDay`),
+igual à simulação da temporada. Antes o dia passava, o mundo resolvia o jogo e
+ele não pontuava — como se não estivesse no elenco.
+
+Medido, temporada inteira pelo calendário, atacante começando em 59 de overall:
+
+| rotina | gols | assist. | condição | reputação | nível |
+|---|---|---|---|---|---|
+| só avança o dia | 1 | 1 | 23 | 0 | 9 |
+| descansa/treina nos dias livres | 18 | 12 | 64 | 100 | 15 |
+
+Gerenciar a rotina passou a ser a diferença entre ser titular e apodrecer no
+banco — e isso agora vale igual na partida jogada e na simulada.
+
+
+---
+
+## 24 — PERFIL DO ATLETA: o card que estourava e a coluna entulhada
+
+Dois problemas, um de layout e um de arrumação.
+
+**O botão MELHORAR saía do card.** Ele vinha com `width: 90px` cravado no HTML,
+dentro de um `flex` — na coluna estreita do perfil o texto empurrava e o botão
+escapava pela direita, por cima do painel vizinho. Agora `.pui-skill-card` é
+GRID (`1fr auto`): o texto encolhe (`min-width: 0`) e o botão fica no lugar. O
+tamanho do botão mora no CSS, não no HTML da cena.
+
+As estrelas de nível também estouravam: com a árvore em 12 degraus elas não
+cabiam numa linha. Ganharam `flex-wrap` e ficaram menores.
+
+**A coluna de CONQUISTAS virou ABAS** — TÍTULOS / PRÊMIOS / HISTÓRICO. Antes
+seleção, prêmios, títulos e a tabela de histórico empilhavam num scroll só, e
+quanto mais longa a carreira, pior. Os três blocos são renderizados juntos e a
+aba só troca `display`: nenhuma reconstrução de tela, nenhum handler novo além
+de um `if` no clique que já existia.
+
+Aba vazia tem texto próprio ("Nenhum prêmio individual ainda") em vez de um
+espaço em branco.
+
+**Detalhe que se revelou na captura:** a barra de XP escrevia o valor duas vezes
+("XP: 2395/6985" no rótulo e "2395/6985" à direita), porque o `createDOMBar` já
+imprime valor/máximo. O rótulo agora é só "XP — PRÓXIMO NÍVEL".
+
+Medido: os quatro botões 20px DENTRO do card (antes estouravam), nenhum
+elemento vazando da raiz, zero rolagem horizontal.
+
+## 25 — GAME FEEL: o jogo responde ao que o jogador QUIS
+
+Jogabilidade boa e timing amador são coisas diferentes. O que separava as duas
+aqui não era física nem IA — era o jogo exigir do jogador precisão de FRAME e
+depois cobrar dele a espera.
+
+**Buffer de input (`GAME_FEEL.INPUT_BUFFER_MS`, 220ms).** Passe e chute
+apertados com a bola ainda chegando eram descartados em silêncio: só valia o
+comando dado no frame exato em que a bola encostava no pé. Jogada de primeira
+era, na prática, sorte. Agora o pedido fica guardado em `this.queuedPass` com
+carimbo de tempo (`em`) e sai no instante do domínio, se ainda estiver dentro da
+janela. Passado o prazo ele MORRE — buffer sem validade vira boneco com vida
+própria, executando dez segundos depois um comando que ninguém mais quer.
+
+O buffer tem duas entradas, e as duas guardam a MESMA estrutura:
+`{pointer: {worldX, worldY}, passType | chute + forca, em}`. O ponteiro é
+COPIADO, não referenciado: o objeto do Phaser é reaproveitado entre eventos e
+guardá-lo cru significa executar o passe na posição do mouse de agora, não na
+de quando o jogador apertou.
+
+**Peso no gol.** O replay mostra o gol de novo, mas não MARCA o momento. Agora o
+autor congela por `GOAL_HITSTOP_MS` e a tela treme por `GOAL_SHAKE_MS`. O
+congelamento é escrito direto no `hitStopTimer` do boneco, e não pela porta
+`applyHitStop()`: aquela porta guarda a velocidade da BOLA e a devolve 110ms
+depois — e nesse meio tempo o gol já repôs a bola no meio de campo, então a
+devolução faria a bola parada disparar sozinha.
+
+**A espera encurtou.** Fade da bola parada, atraso da cobrança da IA e a saída
+para o pós-jogo eram literais espalhados; viraram
+`SETPIECE_FADE_OUT_MS` / `SETPIECE_FADE_IN_MS` / `SETPIECE_AI_DELAY_MS` /
+`ENDGAME_DELAY_MS`. Todo número de RITMO da partida mora em `GAME_FEEL`, num
+bloco só, porque ajuste de timing se faz jogando: quem sente o jogo mexe em oito
+constantes vizinhas, não caça `delayedCall(1500)` em três arquivos.
+
+Check no fim do `GameScene.js`: a janela do buffer existe, é curta (80–400ms),
+aceita o pedido na borda e recusa 1ms depois — e as esperas de bola parada não
+podem encolher a ponto de o jogador não ver o que aconteceu.
+
+## 26 — PERSPECTIVA: o campo inclinado sob bonecos de pé
+
+Os sprites sempre foram "high top-down" — vistos bem de cima, mas ainda de pé.
+O campo era top-down puro, e a mistura dava a impressão errada: chão de mapa
+com gente em pé em cima dele.
+
+A inclinação é **ortográfica**: câmera baixada, sem ponto de fuga. Isso é uma
+multiplicação só — o CHÃO encolhe na vertical por `cos(θ)`, e quem faz é o zoom
+assimétrico da câmera (`setZoom(z, z*k)`, `k = PERSPECTIVA.ACHATAMENTO_Y`,
+hoje 0.8 ≈ 37°). Nenhuma coordenada de jogo muda: a física continua num campo
+plano de 1600x1000 e a mira do mouse continua certa, porque `getWorldPoint`
+inverte a matriz da câmera com o `zoomY` dentro.
+
+Trapézio (perto maior que longe) seria ponto de fuga de verdade, e aí a posição
+de tela deixaria de ser função linear da posição de mundo: clique, hitbox e
+sombra teriam de ser remapeados um a um. Ortográfico dá o mesmo recado de graça.
+
+O preço é o resto. A câmera achata TUDO, inclusive o que deveria continuar de
+pé, e é isso que o `Perspectiva` organiza em quatro portas:
+
+- **`zoom(cam, z)`** — a assimetria. Existe em um lugar só: com `setZoom` cru
+  nos quatro pontos que mexem em zoom (câmera dinâmica, entrada e saída do
+  replay, LAN), a inclinação sumia na primeira volta do replay.
+- **`nivel(cam)`** — o zoom vivo. `cam.zoom` do Phaser 4 devolve a MÉDIA de
+  zoomX e zoomY, e o zoom dinâmico realimenta o próprio valor todo frame:
+  realimentar a média afunda a câmera sozinha. Medido antes do conserto: 1.0
+  virou **0.169** em segundos, o jogador saiu da tela e o minimapa continuou
+  perfeito — parece bug de render, é aritmética.
+- **`dePe`/`reta`** — quem escapa do achatamento (boneco, bola no ar, nome,
+  cartão, texto): desenhado 1/k mais alto para a câmera devolver ao tamanho.
+- **`corpo`** — o hitbox de quem foi esticado. O corpo Arcade NÃO é
+  independente da escala (`height = sourceHeight * scaleY`,
+  `position.y = y + scaleY * (offset.y - displayOriginY)`): esticar o desenho,
+  sozinho, esticaria o corpo junto e o boneco roubaria bola 25% mais longe sem
+  nada no console. A fonte encolhe por k e o offset encolhe **em torno da
+  origem** — não é `offset * k`, a origem não está no zero.
+
+**O que está pregado na tela precisa de mais que escala.** A câmera achata em
+torno do CENTRO dela, então HUD fixo não só espreme: DESCE. O aviso a 80px do
+topo aparecia a 124px e o menu de pausa começava 60px abaixo e vazava por
+baixo — parece desalinho de CSS. `Perspectiva.tela()` desfaz a conta da câmera
+(`tela = c + (y - c) * k`) e devolve objeto ao pixel e à altura de origem;
+vale para texto, `Graphics` do minimapa, container do replay e a camada DOM,
+que também anda na matriz da câmera. Em container, compensa-se o CONTAINER, uma
+vez só — compensar os filhos junto dobra a conta.
+
+Sombra da bola, círculo de stamina e as linhas do gramado ficam achatados de
+propósito: eles estão no chão, é o que a inclinação tem de fazer com eles.
+
+Check no `Perspectiva.js`: o corpo compensado ocupa o mesmo retângulo de mundo
+que ocupava sem inclinação; o objeto de tela volta ao mesmo pixel e à mesma
+altura; e 600 frames do laço do zoom dinâmico convergem para o alvo em vez de
+afundar (esse é o que pega a regressão do `cam.zoom`).
+
+## 27 — FEEDBACK: o efeito é PROPORCIONAL, ou não diz nada
+
+Um efeito de tamanho fixo informa "aconteceu algo" e para por aí. O jogo tinha
+sete partículas para o toque de dois metros e as mesmas sete para a bomba de
+fora da área — a diferença estava na física e no som, e não no que se vê.
+
+Agora todo feedback de partida sai de um número que a jogada JÁ produziu:
+
+| lance | de onde vem a força |
+|---|---|
+| chute e passe | `ball.lastKickForce / 22` (a escala do som, `*_MAX_KICK_FORCE_COEF`) |
+| rastro da bola | velocidade contra `BALL_PHYSICS.PASS_SPEED_MAX` |
+| defesa do goleiro | velocidade da bola no instante da luva |
+| trave | velocidade no instante do choque |
+| quique no gramado | `|vz|` na hora de tocar o chão |
+| ricochete no corpo | velocidade que a bola tinha antes do tranco |
+| carrinho e corrida | quem desliza, e quem passa de 85% da velocidade de sprint |
+
+**Uma função para todo o pó: `spawnImpactDust(x, y, cor, {forca, angulo,
+abertura, depth})`.** O que muda entre um chute e um quique é número, não
+comportamento — `forca` (0..1) manda de uma vez na QUANTIDADE (3 a 18), no
+tamanho, na distância e na duração. `angulo` + `abertura` fazem a nuvem sair
+em cone para um lado: o pó do chute sai contra o pé, a grama do carrinho sai
+atrás do boneco. Sem ângulo, espalha em roda como antes.
+
+**O rastro da bola era só para chute com curva** — ou seja, a bomba reta, o
+chute que mais precisa parecer forte, viajava com o mesmo desenho de um toque
+lateral. Agora a força do rastro é a VELOCIDADE, e a curva virou piso
+(`FEEDBACK.RASTRO_CURVA`): bola rodando risca o ar mesmo devagar.
+
+**Poeira de pé é por ENTIDADE, não global** (`atualizarPoeiraDosPes`): com um
+relógio só, dois carrinhos ao mesmo tempo dividiriam a mesma nuvem e o segundo
+pareceria não ter acontecido. Carrinho arranca grama a cada 55ms, corrida
+levanta pó a cada 150ms.
+
+Tudo isso é um efeito do catálogo (`particulas`), então o interruptor já
+aparece nas duas telas de configuração e o rastro, o pó e as faíscas somem
+juntos para quem desligar. Números em `FEEDBACK` (constants.js).
+
+Check no `GameScene.hud.js`: a nuvem é medida numa cena falsa — força 0 dá o
+mínimo, força 1 dá o máximo, o meio fica no meio, o cone com abertura zero
+manda TODA partícula para o mesmo lado, e com o interruptor desligado não nasce
+nenhuma. Nuvem que parou de responder à força é o defeito difícil de notar
+jogando: "saiu poeira" parece certo em qualquer caso.

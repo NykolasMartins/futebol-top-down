@@ -14,8 +14,8 @@
     />
 
     <!-- UI Retro-Moderno -->
-    <link rel="stylesheet" href="css/ui.css" />
-    <link rel="stylesheet" href="css/main.css" />
+    <link rel="stylesheet" href="css/ui.css?v=1.15.0" />
+    <link rel="stylesheet" href="css/main.css?v=1.15.0" />
   </head>
   <body>
     <!-- ═══ OLHO DE PEIXE PARA A UI (DOM) ═══════════════════════════════════
@@ -101,57 +101,62 @@
     <script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.js"></script>
 
     <!-- Constantes -->
-    <script src="js/constants.js"></script>
+    <script src="js/constants.js?v=1.15.0"></script>
 
     <!-- Dados -->
-    <script src="js/data/RealRosters.js"></script>
-    <script src="js/data/LeaguesDB.js"></script>
+    <script src="js/data/RealRosters.js?v=1.15.0"></script>
+    <script src="js/data/LeaguesDB.js?v=1.15.0"></script>
 
     <!-- Sistemas -->
-    <script src="js/systems/UIHelper.js"></script>
+    <script src="js/systems/UIHelper.js?v=1.15.0"></script>
     <!-- Efeitos visuais: estado global, lido pelo main.js e pelas telas de config -->
-    <script src="js/systems/EfeitosVisuais.js"></script>
-    <script src="js/systems/CareerMode.js"></script>
-    <script src="js/systems/TacticManager.js"></script>
+    <script src="js/systems/EfeitosVisuais.js?v=1.15.0"></script>
+    <!-- Perspectiva: lida pelas entidades e pela câmera, antes das duas -->
+    <script src="js/systems/Perspectiva.js?v=1.15.0"></script>
+    <script src="js/systems/Som.js?v=1.15.0"></script>
+    <script src="js/systems/Elenco.js?v=1.15.0"></script>
+    <script src="js/systems/Dificuldade.js?v=1.15.0"></script>
+    <script src="js/systems/CareerMode.js?v=1.15.0"></script>
+    <script src="js/systems/TacticManager.js?v=1.15.0"></script>
     <!-- AIBrain depois do TacticManager e ANTES das entidades: elas delegam a ele -->
-    <script src="js/systems/AIBrain.js"></script>
-    <script src="js/systems/SeasonManager.js"></script>
+    <script src="js/systems/AIBrain.js?v=1.15.0"></script>
+    <script src="js/systems/SeasonManager.js?v=1.15.0"></script>
     <!-- MatchSimulator depois de SeasonManager: o check do boot usa o PRNG dele -->
-    <script src="js/systems/MatchSimulator.js"></script>
-    <script src="js/systems/CalendarManager.js"></script>
+    <script src="js/systems/MatchSimulator.js?v=1.15.0"></script>
+    <script src="js/systems/CalendarManager.js?v=1.15.0"></script>
     <!-- Multiplayer LAN: cliente de sala, antes da cena que o usa -->
-    <script src="js/systems/LobbyClient.js"></script>
+    <script src="js/systems/LobbyClient.js?v=1.15.0"></script>
 
     <!-- Entidades -->
-    <script src="js/entities/Ball.js"></script>
-    <script src="js/entities/Player.js"></script>
-    <script src="js/entities/Enemy.js"></script>
-    <script src="js/entities/Goalkeeper.js"></script>
+    <script src="js/entities/Ball.js?v=1.15.0"></script>
+    <script src="js/entities/Player.js?v=1.15.0"></script>
+    <script src="js/entities/Enemy.js?v=1.15.0"></script>
+    <script src="js/entities/Goalkeeper.js?v=1.15.0"></script>
 
     <!-- Cenas -->
-    <script src="js/scenes/MenuScene.js"></script>
-    <script src="js/scenes/CharacterCreationScene.js"></script>
-    <script src="js/scenes/ExhibitionMatchScene.js"></script>
-    <script src="js/scenes/PreGameScene.js"></script>
-    <script src="js/scenes/GameScene.js"></script>
+    <script src="js/scenes/MenuScene.js?v=1.15.0"></script>
+    <script src="js/scenes/CharacterCreationScene.js?v=1.15.0"></script>
+    <script src="js/scenes/ExhibitionMatchScene.js?v=1.15.0"></script>
+    <script src="js/scenes/PreGameScene.js?v=1.15.0"></script>
+    <script src="js/scenes/GameScene.js?v=1.15.0"></script>
     <!-- Mixins de GameScene: SEMPRE depois de GameScene.js -->
-    <script src="js/scenes/GameScene.render.js"></script>
-    <script src="js/scenes/GameScene.input.js"></script>
-    <script src="js/scenes/GameScene.replay.js"></script>
-    <script src="js/scenes/GameScene.hud.js"></script>
-    <script src="js/scenes/GameScene.lan.js"></script>
-    <script src="js/scenes/GameScene.lansync.js"></script>
-    <script src="js/scenes/PenaltyShootoutScene.js"></script>
-    <script src="js/scenes/EndGameScene.js"></script>
-    <script src="js/scenes/PlayerProfileScene.js"></script>
-    <script src="js/scenes/TransferMarketScene.js"></script>
-    <script src="js/scenes/TrainingScene.js"></script>
-    <script src="js/scenes/MultiplayerScene.js"></script>
+    <script src="js/scenes/GameScene.render.js?v=1.15.0"></script>
+    <script src="js/scenes/GameScene.input.js?v=1.15.0"></script>
+    <script src="js/scenes/GameScene.replay.js?v=1.15.0"></script>
+    <script src="js/scenes/GameScene.hud.js?v=1.15.0"></script>
+    <script src="js/scenes/GameScene.lan.js?v=1.15.0"></script>
+    <script src="js/scenes/GameScene.lansync.js?v=1.15.0"></script>
+    <script src="js/scenes/PenaltyShootoutScene.js?v=1.15.0"></script>
+    <script src="js/scenes/EndGameScene.js?v=1.15.0"></script>
+    <script src="js/scenes/PlayerProfileScene.js?v=1.15.0"></script>
+    <script src="js/scenes/TransferMarketScene.js?v=1.15.0"></script>
+    <script src="js/scenes/TrainingScene.js?v=1.15.0"></script>
+    <script src="js/scenes/MultiplayerScene.js?v=1.15.0"></script>
 
     <!-- Filtro CRT/VHS: ANTES do main.js, que o aplica em cada cena -->
-    <script src="js/systems/CrtVhsFilter.js"></script>
+    <script src="js/systems/CrtVhsFilter.js?v=1.15.0"></script>
 
     <!-- Main -->
-    <script src="js/main.js"></script>
+    <script src="js/main.js?v=1.15.0"></script>
   </body>
 </html>

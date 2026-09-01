@@ -32,14 +32,18 @@ class Enemy extends Phaser.Physics.Arcade.Sprite {
     // CÉLULA mantém o boneco do mesmo tamanho em campo; deixar 48 fixo o
     // encolheria 10%.
     const _px = (48 * (typeof BASE_FRAME_SIZE !== "undefined" ? BASE_FRAME_SIZE : 68)) / 68;
-    this.setDisplaySize(_px, _px);
+    // Esticado na vertical de propósito: a câmera está inclinada e achata tudo
+    // (ver Perspectiva). O boneco é das poucas coisas que precisa continuar de
+    // pé, então ele é DESENHADO mais alto para voltar ao tamanho certo na tela.
+    Perspectiva.dePe(this, _px, _px);
     // O offset acompanha a CÉLULA do atlas: era 12/20 quando o frame tinha
     // 68px. Número fixo aqui desalinha o corpo do desenho toda vez que o
     // tamanho do sprite muda (foi o que aconteceu com o asset novo).
     const _celula = typeof BASE_FRAME_SIZE !== "undefined" ? BASE_FRAME_SIZE : 68;
     const _folga = (_celula - 68) / 2;
-    this.body.setSize(24, 24);
-    this.body.setOffset(12 + _folga, 20 + _folga);
+    // O corpo passa pela mesma porta: sem ela, esticar o desenho esticaria o
+    // hitbox junto e o boneco roubaria bola mais longe sem nada no console.
+    Perspectiva.corpo(this, 24, 24, 12 + _folga, 20 + _folga);
     this.body.setBounce(0);
     this.setAngle(0);
     this.setDepth(29);

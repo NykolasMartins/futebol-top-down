@@ -573,7 +573,18 @@ Object.assign(GameScene.prototype, {
   createPost(x, y) {
     const post = this.add.circle(x, y, 6, 0xffffff);
     this.physics.add.existing(post, true);
-    this.physics.add.collider(this.ball, post);
+    // O "tlim" da trave sai do próprio colisor: é o único lugar que sabe que a
+    // bola bateu no ferro, e ninguém precisa de um teste de distância novo.
+    this.physics.add.collider(this.ball, post, () => {
+      Som.tocar("trave");
+      // Trave é o lance que mais dói e o que menos aparecia: só o som mudava.
+      const v = this.ball.body ? this.ball.body.velocity.length() : 0;
+      const forca = Phaser.Math.Clamp(v / BALL_PHYSICS.PASS_SPEED_MAX, 0.2, 1);
+      this.spawnImpactDust(this.ball.x, this.ball.y - this.ball.z, 0xfff0b0, {
+        forca,
+      });
+      EfeitosVisuais.tremer(this, 90, 0.003 + 0.006 * forca);
+    });
     this.physics.add.collider(this.allPlayers, post);
     post.setDepth(32);
 

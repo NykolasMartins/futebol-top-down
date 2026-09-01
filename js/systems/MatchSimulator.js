@@ -32,8 +32,13 @@ const MATCH_SIM = {
  * linha de maior rating. Elenco inteiro seria injusto com quem tem banco ruim.
  */
 function starterRating(teamId) {
+  // Pelo `getTeamRoster`, não pelo banco cru: é assim que o simulador enxerga
+  // o clube que envelheceu, vendeu o craque ou subiu um garoto da base. Com
+  // `REAL_ROSTERS` direto, a força dos times ficava congelada para sempre.
   const roster =
-    (typeof REAL_ROSTERS !== "undefined" && REAL_ROSTERS[teamId]) || [];
+    (typeof getTeamRoster === "function" && getTeamRoster(teamId)) ||
+    (typeof REAL_ROSTERS !== "undefined" && REAL_ROSTERS[teamId]) ||
+    [];
   const gk = roster.find((p) => p.position === "GK");
   const linha = roster
     .filter((p) => p.position !== "GK")

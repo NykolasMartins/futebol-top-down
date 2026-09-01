@@ -10,7 +10,10 @@ globalThis.GameScene = class {};
 globalThis.GameStates = { PLAYING: "PLAYING" };
 globalThis.Phaser = {
   Input: { Keyboard: { KeyCodes: {}, JustDown: () => false } },
-  Math: { DegToRad: (d) => (d * Math.PI) / 180 },
+  Math: {
+    DegToRad: (d) => (d * Math.PI) / 180,
+    Clamp: (v, lo, hi) => Math.min(hi, Math.max(lo, v)),
+  },
 };
 
 vm.runInThisContext(

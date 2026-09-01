@@ -2,10 +2,11 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "//": "O servidor de salas do próprio projeto serve o jogo E aguenta carga: o `python -m http.server` é single-thread e engasga com os 153 assets que o GameScene pede de uma vez — a partida ficava presa em 32/153 sem erro nenhum, o que parece bug do jogo e não é.",
       "name": "jogo",
-      "runtimeExecutable": "python",
-      "runtimeArgs": ["-m", "http.server", "8000"],
-      "port": 8000
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["server/server.js"],
+      "port": 8080
     }
   ]
 }

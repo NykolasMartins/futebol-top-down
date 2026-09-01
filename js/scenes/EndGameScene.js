@@ -50,7 +50,8 @@ class EndGameScene extends Phaser.Scene {
         // Empate no tempo normal só vira classificação com isto.
         penaltyWinnerId: this.penaltyWinnerId,
       };
-      if (isCopa) career.recordCopaMatch(resultado);
+      if (this.matchType === "selecao") career.recordSelecaoMatch(resultado);
+      else if (isCopa) career.recordCopaMatch(resultado);
       else career.recordMatch(resultado);
     }
 
@@ -168,7 +169,7 @@ class EndGameScene extends Phaser.Scene {
           </div>
         </div>
 
-        ${UIHelper.createDOMBar(`XP: ${career.xp}/100`, career.xp, 100, "yellow")}
+        ${UIHelper.createDOMBar(`XP: ${career.xp}/${career.xpParaSubir()}`, career.xp, career.xpParaSubir(), "yellow")}
 
         <div class="pui-text-pixel pui-text-muted" style="font-size:5px;margin-top:8px;line-height:2;">
           Vel: ${career.speed} &nbsp;|&nbsp;

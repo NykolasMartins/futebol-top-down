@@ -622,7 +622,7 @@ class TrainingScene extends Phaser.Scene {
     }).setOrigin(0.5));
 
     if (career) {
-      overlay.add(this.add.text(500, 395, `Nível: ${career.level}  |  XP: ${career.xp}/100  |  Reputação: ${career.coachReputation}/100`, {
+      overlay.add(this.add.text(500, 395, `Nível: ${career.level}  |  XP: ${career.xp}/${career.xpParaSubir()}  |  Reputação: ${career.coachReputation}/100`, {
         fontSize: "14px", fill: "#aaa", fontFamily: "Arial, sans-serif",
       }).setOrigin(0.5));
     }

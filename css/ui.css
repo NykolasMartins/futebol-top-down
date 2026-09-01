@@ -1035,15 +1035,41 @@
   background: #0a1a0a;
 }
 
+/* Card de skill em GRID: texto de um lado, botão do outro, e o botão nunca
+   estoura o card. Era `flex` com o botão de 90px fixo — com a coluna estreita
+   ele saía pela direita, por cima do painel vizinho. */
+.pui-skill-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-gap: 10px;
+  align-items: center;
+}
+.pui-skill-info {
+  min-width: 0; /* deixa o texto encolher em vez de empurrar o botão para fora */
+}
+.pui-skill-acao {
+  justify-self: end;
+}
+.pui-skill-acao .pui-btn {
+  width: 74px;
+  height: 34px;
+  font-size: 5px;
+  white-space: normal;
+}
+
+/* 12 níveis não cabem numa linha só: as estrelas quebram em duas. */
 .pui-skill-stars {
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
   margin-top: 6px;
+  max-width: 100%;
 }
 
 .pui-skill-star {
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
+  flex: 0 0 auto;
   background: #1a1a1a;
   border: 2px solid #2a2a2a;
 }
@@ -2394,4 +2420,122 @@
   height: 15px;
   background: var(--cartao-vermelho);
   border: 1px solid #000;
+}
+
+/* =============================================================================
+   PILHA DE AVISOS (toasts)
+   A camada NÃO é filha direta do #game-container — o `add.dom` do Phaser a
+   pendura dentro do container DOM dele, então a regra `!important` que estica
+   os filhos diretos (main.css) não a alcança e ela encolhia até o tamanho do
+   texto, no canto errado. Daí o tamanho explícito do canvas aqui: é o que dá
+   à camada a tela inteira para alinhar os cards embaixo, à direita.
+   ============================================================================= */
+.pui-toast-layer {
+  width: 1000px;
+  height: 600px;
+  /* `!important` porque `main.css` tem `#game-container > div *
+     { pointer-events: auto }` — especificidade 1-0-1 contra 0-1-0 da classe.
+     Sem isto a camada (que cobre o canvas inteiro e é invisível) engolia TODO
+     clique enquanto houvesse aviso na tela. */
+  pointer-events: none !important;
+  font-family: var(--pui-font);
+}
+
+/* O empilhamento fica AQUI, e não na camada: o Phaser escreve `display` inline
+   no elemento do `add.dom`, e inline ganha da folha — o flex da camada virava
+   `block` e todo aviso ancorava no canto superior esquerdo. */
+.pui-toast-stack {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: flex-end;
+  gap: 6px;
+  padding: 16px 16px 60px 16px;
+  pointer-events: none !important; /* mesma briga de especificidade da camada */
+}
+
+.pui-toast {
+  /* Só o CARD volta a receber clique — é o que o dispensa mais cedo. */
+  pointer-events: auto !important;
+  cursor: pointer;
+  max-width: 340px;
+  background: var(--pui-bg-panel);
+  border: 2px solid var(--pui-border-light);
+  border-left-width: 6px;
+  box-shadow: 3px 3px 0 #000;
+  color: var(--pui-text);
+  font-size: 6px;
+  line-height: 1.9;
+  padding: 10px 12px;
+  animation: pui-toast-entra 0.22s ease-out;
+}
+.pui-toast:hover {
+  border-color: var(--pui-green);
+}
+.pui-toast.saindo {
+  animation: pui-toast-sai 0.22s ease-in forwards;
+}
+
+/* A cor da borda esquerda é o tipo do aviso — ler sem precisar ler. */
+.pui-toast-salary { border-left-color: var(--pui-green); }
+.pui-toast-trophy { border-left-color: var(--pui-gold); }
+.pui-toast-transfer { border-left-color: var(--pui-blue-bright); }
+.pui-toast-news { border-left-color: var(--pui-text-muted); }
+.pui-toast-copa_phase { border-left-color: var(--pui-blue); }
+.pui-toast-copa_elim { border-left-color: var(--pui-red-bright); }
+.pui-toast-erro { border-left-color: var(--pui-red-bright); color: var(--pui-red-bright); }
+.pui-toast-ok { border-left-color: var(--pui-green); color: var(--pui-green); }
+
+@keyframes pui-toast-entra {
+  from { opacity: 0; transform: translateX(24px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+@keyframes pui-toast-sai {
+  from { opacity: 1; transform: translateX(0); max-height: 120px; }
+  to { opacity: 0; transform: translateX(24px); max-height: 0; padding-top: 0; padding-bottom: 0; }
+}
+
+/* Botão: faltava o estado de CLIQUE. Sem ele o botão parece travado no toque —
+   o hover já existia, o pressionado não. */
+.pui-btn:active:not(.pui-btn-disabled),
+.pui-pause-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #000;
+}
+
+/* =============================================================================
+   ABAS (perfil do atleta)
+   Três blocos empilhados numa coluna só viravam uma parede de rolagem: título,
+   prêmio, seleção e histórico competindo pelo mesmo espaço. A aba mostra um
+   por vez sem reconstruir a tela — só troca de classe.
+   ============================================================================= */
+.pui-abas {
+  display: flex;
+  gap: 2px;
+  padding: 0 6px;
+  background: var(--pui-bg-header);
+  border-bottom: 2px solid var(--pui-border);
+}
+
+.pui-aba {
+  flex: 1;
+  font-family: var(--pui-font);
+  font-size: 5px;
+  letter-spacing: 1px;
+  padding: 9px 4px;
+  background: transparent;
+  color: var(--pui-text-muted);
+  border: none;
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: color var(--pui-transition), border-color var(--pui-transition);
+}
+.pui-aba:hover {
+  color: var(--pui-text);
+}
+.pui-aba.ativa {
+  color: var(--pui-gold);
+  border-bottom-color: var(--pui-gold);
 }

@@ -310,6 +310,10 @@ for (const _ligaId of Object.keys(LEAGUES_DB)) {
  * está no DB (amistoso com time avulso).
  */
 function clubAcronym(clubId) {
+  // Seleção tem sigla própria (BRA, ING): sem isto o placar da data FIFA
+  // mostraria "SEL" nos dois lados, que é o nome do prefixo, não do time.
+  if (typeof NATIONAL_TEAMS !== "undefined" && NATIONAL_TEAMS[clubId])
+    return NATIONAL_TEAMS[clubId].short;
   const clube = typeof findClub === "function" ? findClub(clubId) : null;
   if (clube && clube.short) return clube.short.toUpperCase().slice(0, 3);
   const nome = (clube && clube.name) || String(clubId || "");
@@ -338,4 +342,96 @@ function competitionShort(competitionId) {
     .join("")
     .toUpperCase();
   return (iniciais || nome.slice(0, 3)).slice(0, 3);
+}
+
+// =============================================================================
+// SELEÇÕES NACIONAIS
+// =============================================================================
+// Uma seleção por país que tem liga jogável. O ELENCO dela não é escrito à mão:
+// sai dos melhores jogadores dos clubes daquela liga (ver `Elenco.selecao`), o
+// que a mantém viva junto com o mundo — quem envelhece ou explode na base muda
+// a convocação sozinho no ano seguinte.
+//
+// A chave é a mesma do TEAMS_DB (uniforme) e do elenco vivo: `selecao_<pais>`.
+const NATIONAL_TEAMS = {
+  selecao_brasil: { label: "Brasil", country: "Brasil", leagueId: "brasileirao", short: "BRA" },
+  selecao_inglaterra: { label: "Inglaterra", country: "Inglaterra", leagueId: "premier_league", short: "ING" },
+  selecao_espanha: { label: "Espanha", country: "Espanha", leagueId: "la_liga", short: "ESP" },
+  selecao_italia: { label: "Itália", country: "Itália", leagueId: "serie_a", short: "ITA" },
+  selecao_alemanha: { label: "Alemanha", country: "Alemanha", leagueId: "bundesliga", short: "ALE" },
+  selecao_franca: { label: "França", country: "França", leagueId: "ligue_1", short: "FRA" },
+};
+
+/** A seleção de um país, pela chave do país. `null` para país sem liga aqui. */
+function nationalTeamOfCountry(country) {
+  const id = Object.keys(NATIONAL_TEAMS).find(
+    (k) => NATIONAL_TEAMS[k].country === country,
+  );
+  return id ? { id, ...NATIONAL_TEAMS[id] } : null;
+}
+
+// =============================================================================
+// NACIONALIDADE DO JOGADOR
+// =============================================================================
+// Nacionalidade é do JOGADOR, não da liga onde ele joga. Sem isto a "seleção do
+// Brasil" convocava o Arrascaeta (uruguaio no Flamengo) e a da Inglaterra
+// virava o elenco estrangeiro da Premier League.
+//
+// O banco não tem esse campo e não vai ter 504 linhas escritas à mão: a
+// nacionalidade é DERIVADA do id (mesmo hash da aparência e da idade), com o
+// país do clube pesando — a maioria de um clube brasileiro é brasileira, e uma
+// minoria vem do pool de vizinhos. É a mesma regra do futebol real, e o efeito
+// que importa aparece: brasileiro que joga na Europa continua convocável, e
+// estrangeiro no Brasil não entra na Seleção.
+//
+// `player.nationality` explícito GANHA do derivado — mesma porta do `skin`/
+// `hair` em `getPlayerAppearance`. É por ali que se corrige um caso conhecido
+// sem tocar no resto (ver Arrascaeta em RealRosters.js).
+const NATIVE_SHARE = 0.7; // fatia do elenco que é do próprio país
+
+const FOREIGN_POOLS = {
+  Brasil: ["Uruguai", "Argentina", "Colômbia", "Chile", "Paraguai", "Venezuela"],
+  Inglaterra: ["Irlanda", "Escócia", "França", "Noruega", "Egito", "Brasil"],
+  Espanha: ["Argentina", "Brasil", "França", "Uruguai", "Marrocos", "Croácia"],
+  Itália: ["Argentina", "França", "Sérvia", "Brasil", "Nigéria", "Suíça"],
+  Alemanha: ["Áustria", "França", "Japão", "Polônia", "Marrocos", "Brasil"],
+  França: ["Senegal", "Argélia", "Brasil", "Marrocos", "Camarões", "Portugal"],
+};
+
+/** País do clube. `null` para clube fora das ligas jogáveis (pool CONMEBOL). */
+function clubCountry(clubId) {
+  const liga = Object.keys(LEAGUES_DB).find((id) =>
+    LEAGUES_DB[id].clubs.some((c) => (c.id || c) === clubId),
+  );
+  return liga ? LEAGUES_DB[liga].country : null;
+}
+
+/**
+ * Nacionalidade do jogador. Explícita ganha; senão hash do id decide entre o
+ * país do clube e o pool de estrangeiros daquele país.
+ */
+function getPlayerNationality(player, clubId) {
+  if (player && typeof player.nationality === "string") return player.nationality;
+  // Curadoria (RealRosters.js) antes do palpite: é ela que impede o Haaland de
+  // ser inglês e o Arrascaeta de ser brasileiro só porque jogam ali.
+  const curado =
+    typeof PLAYER_NATIONALITY !== "undefined" &&
+    player &&
+    PLAYER_NATIONALITY[player.id];
+  if (curado) return curado;
+  const pais = clubCountry(clubId);
+  if (!pais) return null;
+
+  const id = (player && (player.id || player.name)) || "anon";
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619) >>> 0;
+  }
+  // Bits altos para a moeda e baixos para o sorteio do pool: usar o mesmo
+  // pedaço do hash nos dois amarraria "é estrangeiro" a "é uruguaio".
+  const moeda = ((h >>> 16) % 1000) / 1000;
+  if (moeda < NATIVE_SHARE) return pais;
+  const pool = FOREIGN_POOLS[pais] || [pais];
+  return pool[h % pool.length];
 }

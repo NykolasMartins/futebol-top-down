@@ -35,19 +35,16 @@ class MenuScene extends Phaser.Scene {
     fieldLines.fillCircle(500, 300, 5);
 
     // ── UI DOM ────────────────────────────────────────────────────────────
-    const careerExists =
-      localStorage.getItem("phaser_football_career") !== null;
+    // Há alguma carreira em QUALQUER slot? O botão CONTINUAR abre a lista.
+    const slots = CareerMode.resumoDosSlots();
+    const careerExists = slots.some((s) => s.existe);
     let saveInfo = "(Sem carreira salva)";
     let saveInfoColor = "var(--pui-text-muted)";
 
     if (careerExists) {
-      try {
-        const raw = JSON.parse(localStorage.getItem("phaser_football_career"));
-        if (raw && raw.playerName) {
-          saveInfo = `${raw.playerName.toUpperCase()} &nbsp;|&nbsp; Nível ${raw.level || 1} &nbsp;|&nbsp; Temporada ${raw.season || 1}`;
-          saveInfoColor = "var(--pui-green-dim)";
-        }
-      } catch (e) {}
+      const usados = slots.filter((s) => s.existe).length;
+      saveInfo = `${usados} de ${CareerMode.SLOTS} carreiras salvas`;
+      saveInfoColor = "var(--pui-green-dim)";
     }
 
     const continueVariant = careerExists ? "blue" : "disabled";
@@ -134,10 +131,7 @@ class MenuScene extends Phaser.Scene {
       }
 
       if (id === "btn-new" || event.target.closest("#btn-new")) {
-        this.cameras.main.fadeOut(200, 0, 0, 0);
-        this.cameras.main.once("camerafadeoutcomplete", () => {
-          this.scene.start("CharacterCreationScene");
-        });
+        this.abrirSlots("novo");
         return;
       }
 
@@ -145,16 +139,7 @@ class MenuScene extends Phaser.Scene {
         (id === "btn-continue" || event.target.closest("#btn-continue")) &&
         careerExists
       ) {
-        window.careerMode = new CareerMode();
-        const loaded = window.careerMode.loadFromLocalStorage();
-        this.cameras.main.fadeOut(200, 0, 0, 0);
-        this.cameras.main.once("camerafadeoutcomplete", () => {
-          if (loaded) {
-            this.scene.start("PreGameScene");
-          } else {
-            this.scene.start("CharacterCreationScene");
-          }
-        });
+        this.abrirSlots("continuar");
       }
     });
 
@@ -202,6 +187,97 @@ class MenuScene extends Phaser.Scene {
    * O modal é filho do container DOM do Phaser (1000x600, `overflow:hidden`) —
    * mede em %, nunca em vw/vh, senão sai cortado em tela grande.
    */
+  /**
+   * Escolha do SLOT — para continuar ou para começar carreira nova.
+   *
+   * Antes havia uma chave só no localStorage: "nova carreira" apagava a
+   * anterior sem aviso e sem volta. Aqui a decisão é explícita, e slot ocupado
+   * pede confirmação antes de sobrescrever.
+   */
+  abrirSlots(modo) {
+    if (this._slots) return;
+    const slots = CareerMode.resumoDosSlots();
+    const titulo = modo === "novo" ? "NOVA CARREIRA — ESCOLHA O SLOT" : "CONTINUAR CARREIRA";
+
+    const cartao = (s) => {
+      const vazio = !s.existe;
+      // No modo continuar, slot vazio não é clicável; no modo novo, é o ideal.
+      const inativo = modo === "continuar" && vazio;
+      const resumo = vazio
+        ? "— vazio —"
+        : `${s.playerName.toUpperCase()}<br><span class="pui-config-hint">${s.club} · Nível ${s.level} · Temporada ${s.season}</span>`;
+      return (
+        '<button class="pui-btn ' +
+        (inativo ? "pui-btn-disabled" : vazio ? "pui-btn-dark" : "pui-btn-blue") +
+        '" data-slot="' +
+        s.slot +
+        '" style="width:100%;height:56px;font-size:7px;text-align:left;' +
+        'justify-content:flex-start;padding:0 14px;white-space:normal;">' +
+        "SLOT " +
+        s.slot +
+        " &nbsp;—&nbsp; " +
+        resumo +
+        "</button>"
+      );
+    };
+
+    const html =
+      '<div class="pui-modal-wrap" style="width:100%;height:100%;' +
+      'display:flex;align-items:center;justify-content:center;">' +
+      '<div class="pui-panel" style="width:72%;padding:18px;">' +
+      '<div class="pui-menu-logo pui-glow" style="font-size:10px;margin-bottom:10px;">' +
+      titulo +
+      "</div>" +
+      '<div style="display:flex;flex-direction:column;gap:8px;">' +
+      slots.map(cartao).join("") +
+      "</div>" +
+      '<button class="pui-btn pui-btn-ghost" id="btn-slots-fechar" ' +
+      'style="width:100%;height:40px;font-size:7px;margin-top:14px;">VOLTAR</button>' +
+      "</div></div>";
+
+    this._slots = this.add.dom(500, 300).createFromHTML(html).setOrigin(0.5);
+    this._slots.addListener("click");
+    this._slots.on("click", (event) => {
+      if (event.target.closest("#btn-slots-fechar")) {
+        this.fecharSlots();
+        return;
+      }
+      const btn = event.target.closest("[data-slot]");
+      if (!btn || btn.classList.contains("pui-btn-disabled")) return;
+
+      const n = parseInt(btn.getAttribute("data-slot"), 10);
+      const info = slots.find((s) => s.slot === n);
+
+      if (modo === "novo" && info.existe && !this._confirmandoSlot) {
+        // Sobrescrever é irreversível: pede o segundo clique, no próprio botão.
+        this._confirmandoSlot = n;
+        btn.textContent = `SLOT ${n} — CLIQUE DE NOVO PARA APAGAR ${info.playerName.toUpperCase()}`;
+        return;
+      }
+
+      CareerMode.usarSlot(n);
+      this.fecharSlots();
+      this.cameras.main.fadeOut(200, 0, 0, 0);
+      this.cameras.main.once("camerafadeoutcomplete", () => {
+        if (modo === "novo") {
+          CareerMode.apagarSlot(n);
+          this.scene.start("CharacterCreationScene");
+          return;
+        }
+        window.careerMode = new CareerMode();
+        const carregou = window.careerMode.loadFromLocalStorage();
+        this.scene.start(carregou ? "PreGameScene" : "CharacterCreationScene");
+      });
+    });
+  }
+
+  fecharSlots() {
+    if (!this._slots) return;
+    this._slots.destroy();
+    this._slots = null;
+    this._confirmandoSlot = null;
+  }
+
   abrirEfeitos() {
     if (this._efeitos) return;
 
@@ -214,6 +290,10 @@ class MenuScene extends Phaser.Scene {
       "Desligue o que pesar ou incomodar. A escolha fica salva neste navegador." +
       "</div>" +
       EfeitosVisuais.linhasHtml() +
+      '<div class="pui-config-sep">SOM</div>' +
+      Som.linhasHtml() +
+      '<div class="pui-config-sep">JOGO</div>' +
+      Dificuldade.linhasHtml() +
       '<button class="pui-btn pui-btn-ghost" id="btn-efeitos-fechar" ' +
       'style="width:100%;height:40px;font-size:7px;margin-top:14px;">FECHAR</button>' +
       "</div></div>";
@@ -222,6 +302,13 @@ class MenuScene extends Phaser.Scene {
     this._efeitos.addListener("click");
     this._efeitos.on("click", (event) => {
       if (EfeitosVisuais.tratarClique(event.target)) return;
+      if (Som.tratarClique(event.target)) return;
+      // A dificuldade redesenha: o botão aceso é o próprio estado na tela.
+      if (Dificuldade.tratarClique(event.target)) {
+        this.fecharEfeitos();
+        this.abrirEfeitos();
+        return;
+      }
       if (event.target.closest("#btn-efeitos-fechar")) this.fecharEfeitos();
     });
   }

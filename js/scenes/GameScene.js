@@ -56,6 +56,9 @@ class GameScene extends Phaser.Scene {
     } else {
       this.halfDuration = UI_CONFIG.HALF_DURATION_SEC;
       this.weather = "clear";
+      // Fora da exibição o time do usuário costuma vir do `careerMode`, mas a
+      // DATA FIFA manda a seleção por aqui: é o que troca elenco e uniforme.
+      if (data && data.homeTeam) this.playerTeamName = data.homeTeam;
     }
 
     const parseColor = (c) => {
@@ -204,6 +207,9 @@ class GameScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor("#1a4d2e"); // Cor de fora do campo (mais escura)
     this.cameras.main.setBounds(0, 0, WORLD_WIDTH, WORLD_HEIGHT);
+    // Câmera inclinada desde o primeiro frame: o zoom dinâmico só roda no
+    // `update`, e antes dele a cena apareceria um instante em top-down puro.
+    Perspectiva.zoom(this.cameras.main, 1);
 
     // O olho de peixe não é aplicado aqui: o `main.js` liga a pipeline na
     // câmera de TODA cena, no evento `create`.
@@ -476,9 +482,13 @@ class GameScene extends Phaser.Scene {
     this.enemies = [];
     const oppRating = this.opponent ? this.opponent.rating || 75 : 75;
     const oppName = this.opponent ? this.opponent.name : "Palmeiras";
-    const oppSpeed = Phaser.Math.Clamp(oppRating, 48, 90);
-    const oppKick = Phaser.Math.Clamp(oppRating + 2, 48, 90);
-    const oppStam = Phaser.Math.Clamp(oppRating - 2, 48, 90);
+    // A dificuldade entra como FATOR na ficha do rival — nunca como `if`.
+    // Multiplicar o rating antes do clamp é o ponto certo: tudo que a entidade
+    // deriva (velocidade, sprint, chute, fôlego) acompanha de uma vez.
+    const fDif = typeof Dificuldade !== "undefined" ? Dificuldade.fator("adversario") : 1;
+    const oppSpeed = Phaser.Math.Clamp(oppRating * fDif, 48, 90);
+    const oppKick = Phaser.Math.Clamp((oppRating + 2) * fDif, 48, 90);
+    const oppStam = Phaser.Math.Clamp((oppRating - 2) * fDif, 48, 90);
 
     // Mesma ordem de elenco que o assignRealPlayerNames (enemies[i] -> line[i]).
     const oppRoster = window.getLinePlayers?.(oppName) || [];
@@ -628,7 +638,9 @@ class GameScene extends Phaser.Scene {
     this.staminaCircleGraphics.setDepth(15);
     this.staminaCircleRadius = 20;
 
-    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+    // Modo de câmera da partida. Z alterna (ver `alternarCamera`).
+    this.cameraAlvo = "jogador";
+    this.seguirCamera();
 
     this.scorePlayer = this.initialScorePlayer || 0;
     this.scoreOpponent = this.initialScoreOpponent || 0;
@@ -739,7 +751,7 @@ class GameScene extends Phaser.Scene {
           text-align:center;
           letter-spacing:1px;
         ">
-          WASD: MOVER &nbsp; | &nbsp; CLIQUE ESQUERDO: PASSE/CHUTE &nbsp; | &nbsp; ESPAÇO: BOTE &nbsp; | &nbsp; SHIFT+ESPAÇO: CARRINHO
+          WASD: MOVER &nbsp; | &nbsp; CLIQUE ESQUERDO: PASSE/CHUTE &nbsp; | &nbsp; ESPAÇO: BOTE &nbsp; | &nbsp; SHIFT+ESPAÇO: CARRINHO &nbsp; | &nbsp; Z: CÂMERA
         </div>
       </div>
     `;
@@ -786,8 +798,10 @@ class GameScene extends Phaser.Scene {
 
     // Minimapa (Mantido com melhor estilo)
     this.createMinimap();
-    if (this.minimapBg) this.minimapBg.setScrollFactor(0);
-    if (this.minimapDots) this.minimapDots.setScrollFactor(0);
+    // Pregados na tela: a câmera inclinada os arrastaria para baixo e os
+    // espremeria junto com o campo (ver Perspectiva.tela).
+    if (this.minimapBg) Perspectiva.tela(this.minimapBg.setScrollFactor(0));
+    if (this.minimapDots) Perspectiva.tela(this.minimapDots.setScrollFactor(0));
 
     if (this.startSecondHalfFlag) {
       this.isSecondHalf = true;
@@ -881,8 +895,15 @@ class GameScene extends Phaser.Scene {
       ball.body.velocity.x = Math.cos(collisionAngle) * newSpeed;
       ball.body.velocity.y = Math.sin(collisionAngle) * newSpeed;
 
-      // Efeito visual: poeira
-      if (this.spawnImpactDust) this.spawnImpactDust(ball.x, ball.y, 0xcccccc);
+      // Efeito visual: poeira na medida do tranco que a bola levou.
+      if (this.spawnImpactDust)
+        this.spawnImpactDust(ball.x, ball.y - ball.z, 0xcccccc, {
+          forca: Phaser.Math.Clamp(
+            currentSpeed / BALL_PHYSICS.PASS_SPEED_MAX,
+            0.12,
+            0.9,
+          ),
+        });
     });
 
     this.isResetting = false;
@@ -932,10 +953,17 @@ class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(201)
       .setAlpha(0);
+    Perspectiva.tela(this.goalText);
 
     // Placar e menus são DOM fora do Phaser: sem este hook eles sobrevivem à
     // troca de cena. Ver GameScene.hud.js.
     this.registerDOMTeardown();
+
+    // Estádio ligado e apito inicial. Se o jogador ainda não tocou em nada, o
+    // contexto não existe e as duas chamadas são silenciosas de graça — mas
+    // para chegar aqui ele clicou no menu, então na prática já destravou.
+    Som.iniciarTorcida();
+    Som.tocar("apito");
 
     // === SISTEMA DE REPLAY ===
     this.replayBuffer = [];
@@ -961,6 +989,8 @@ class GameScene extends Phaser.Scene {
         fontFamily: "Arial",
       }),
     );
+    // No CONTAINER, uma vez só: compensar os filhos também dobraria a conta.
+    Perspectiva.tela(this.replayUI);
   }
 
   /**
@@ -1105,11 +1135,18 @@ class GameScene extends Phaser.Scene {
             this.ball.stealCooldown = 500;
             this.ball.body.setVelocity(0, 0);
 
-            // Execute queued one-touch pass if applicable
+            // Jogada de primeira: o pedido guardado vale por
+            // `GAME_FEEL.INPUT_BUFFER_MS`. Dentro da janela ele sai no instante
+            // em que a bola chega — é isso que faz o jogo responder ao que o
+            // jogador quis, e não ao frame exato em que apertou.
             if (closestPlayer === this.player && this.queuedPass) {
               const q = this.queuedPass;
               this.queuedPass = null;
-              this.executPass(q.pointer, q.passType);
+              if (this.time.now - q.em <= GAME_FEEL.INPUT_BUFFER_MS) {
+                if (q.chute)
+                  this.kickBallFrom(this.player, q.pointer.worldX, q.pointer.worldY, q.forca);
+                else this.executPass(q.pointer, q.passType);
+              }
             }
 
             // Auto switch control to the player who just got the ball (only in full control mode)!
@@ -1354,6 +1391,8 @@ class GameScene extends Phaser.Scene {
       );
     }
 
+    this.atualizarPoeiraDosPes(time);
+
     // === EFEITOS VISUAIS DO CHUTE ESPECIAL ===
     if (this.specialShotParticles) {
       this.specialShotParticles.clear();
@@ -1430,6 +1469,7 @@ class GameScene extends Phaser.Scene {
           .setOrigin(1, 0.5)
           .setScrollFactor(0)
           .setDepth(102);
+        Perspectiva.tela(this.spectatorText);
       }
     }
 
@@ -1663,47 +1703,52 @@ class GameScene extends Phaser.Scene {
   checkCollisions() {
     if (!this.ball || this.ball.owner) return;
 
-    // Altura máxima que o goleiro alcança
-    const GK_REACH_STANDING = 48;
-    const GK_REACH_JUMPING = 90;
+    // Altura que o goleiro alcança. Vem de `GOALKEEPER` — os números viviam
+    // cravados aqui (48/90) enquanto a constante existia sem ninguém ler.
+    //
+    // A dificuldade multiplica o alcance do goleiro ADVERSÁRIO. O do usuário
+    // fica intocado: no fácil, um goleiro pior do lado dele seria punição.
+    const alcanceDe = (gk) => {
+      const base = gk.isJumping
+        ? GOALKEEPER.REACH_JUMPING
+        : GOALKEEPER.REACH_STANDING;
+      const fator =
+        typeof Dificuldade !== "undefined" && !gk.isPlayerTeam
+          ? Dificuldade.fator("goleiro")
+          : 1;
+      return base * fator;
+    };
 
-    const distGkTop = Phaser.Math.Distance.Between(
-      this.ball.x,
-      this.ball.y,
-      this.gkTop.x,
-      this.gkTop.y,
-    );
-
-    if (distGkTop < 45 && !this.gkTop.isHoldingBall) {
-      const reach = this.gkTop.isJumping ? GK_REACH_JUMPING : GK_REACH_STANDING;
-      if (this.ball.z < reach) {
-        this.gkTop.catchBall(this.ball);
-      }
-    }
-
-    const distGkBot = Phaser.Math.Distance.Between(
-      this.ball.x,
-      this.ball.y,
-      this.gkBottom.x,
-      this.gkBottom.y,
-    );
-
-    if (distGkBot < 45 && !this.gkBottom.isHoldingBall) {
-      const reach = this.gkBottom.isJumping
-        ? GK_REACH_JUMPING
-        : GK_REACH_STANDING;
-      if (this.ball.z < reach) {
-        this.gkBottom.catchBall(this.ball);
-      }
-    }
+    [this.gkTop, this.gkBottom].forEach((gk) => {
+      if (!gk || gk.isHoldingBall) return;
+      const dist = Phaser.Math.Distance.Between(
+        this.ball.x,
+        this.ball.y,
+        gk.x,
+        gk.y,
+      );
+      if (dist < GOALKEEPER.CATCH_DISTANCE && this.ball.z < alcanceDe(gk))
+        gk.catchBall(this.ball);
+    });
   }
 
-  kickBall(pointer) {
+  kickBall(pointer, forca = 22) {
     if (this.isGameOver) return;
+    if (!this.ball) return;
 
-    if (this.ball && this.ball.owner === this.player) {
-      this.kickBallFrom(this.player, pointer.worldX, pointer.worldY, 22);
+    if (this.ball.owner === this.player) {
+      this.kickBallFrom(this.player, pointer.worldX, pointer.worldY, forca);
+      return;
     }
+    // Sem a bola, o chute ESPERA por ela — mesma janela do passe. Antes o
+    // comando simplesmente sumia, e chute de primeira era impossível: o
+    // jogador tinha de acertar o frame exato em que a bola encostava no pé.
+    this.queuedPass = {
+      pointer: { worldX: pointer.worldX, worldY: pointer.worldY },
+      chute: true,
+      forca,
+      em: this.time.now,
+    };
   }
 
   /**
@@ -1758,7 +1803,12 @@ class GameScene extends Phaser.Scene {
     if (vBola > CAMERA.FAST_BALL_SPEED) alvo = CAMERA.ZOOM_WIDE;
     else if (noPerigo) alvo = CAMERA.ZOOM_TIGHT;
 
-    cam.setZoom(Phaser.Math.Linear(cam.zoom, alvo, CAMERA.LERP));
+    // `cam.zoom` aqui seria a média dos dois eixos, não o nível atual: ver
+    // `Perspectiva.nivel`.
+    Perspectiva.zoom(
+      cam,
+      Phaser.Math.Linear(Perspectiva.nivel(cam), alvo, CAMERA.LERP),
+    );
   }
 
   /** Tempo de viagem que o passe PERSEGUE, proporcional à distância. */
@@ -1835,7 +1885,7 @@ class GameScene extends Phaser.Scene {
             (camera, progress) => {
               if (progress === 1) {
                 // Ao terminar o pan, volta a seguir o jogador com lerp suave
-                camera.startFollow(this.player, true, 0.08, 0.08);
+                this.seguirCamera();
               }
             },
           );
@@ -1844,6 +1894,15 @@ class GameScene extends Phaser.Scene {
 
       this.ball.owner = null;
       this.ball.stealCooldown = options.isPass ? 450 : 550;
+
+      // Som do pé na bola. Ponto único, como o `kickAnimUntil`: passe,
+      // cruzamento, chute a gol e bola parada passam todos por aqui.
+      // A força que chega aqui é a mesma escala do `maxKickForce` das
+      // entidades (PLAYER_ATTR.*_MAX_KICK_FORCE_COEF, ~13 a 22): normalizar por
+      // ela é o que faz um toque soar diferente de uma bomba.
+      Som.tocar(options.isPass ? "passe" : "chute", {
+        forca: Phaser.Math.Clamp(kickForceOrCharge / 22, 0.25, 1),
+      });
 
       let angle = Phaser.Math.Angle.Between(
         entity.x,
@@ -2073,6 +2132,19 @@ class GameScene extends Phaser.Scene {
 
       this.ball.lastKicker = entity;
       this.ball.lastKickForce = finalForce * ballSpeedMult;
+
+      // Pó do pé CONTRA a direção da bola, na medida da pancada. `22` é a
+      // mesma escala que o som usa (PLAYER_ATTR.*_MAX_KICK_FORCE_COEF): um
+      // toque de 3 e uma bomba de 22 deixam de ter o mesmo desenho.
+      const potencia = Phaser.Math.Clamp(this.ball.lastKickForce / 22, 0.1, 1);
+      this.spawnImpactDust(entity.x, entity.y + 8, 0xe6dfc4, {
+        forca: potencia,
+        angulo: Math.atan2(vy, vx) + Math.PI,
+        abertura: 1.1,
+        depth: 12,
+      });
+      if (!options.isPass && potencia >= FEEDBACK.CHUTE_TREMOR_MIN)
+        EfeitosVisuais.tremer(this, 70, 0.002 + 0.003 * potencia);
       this.ball.lastKickAt = this.time.now;
       this.ball.lastKickType = options.isPass ? "pass" : "shot";
       this.lastTouchTeam = entity.isPlayerTeam ? "PLAYER" : "OPPONENT";
@@ -2108,10 +2180,13 @@ class GameScene extends Phaser.Scene {
     this.gamepadCharging = false;
 
     if (this.ball.owner !== this.player) {
-      // Queue pass for one-touch
+      // BUFFER DE INPUT: guarda o pedido com HORA. Sem o carimbo, um comando
+      // dado dez segundos antes disparava quando a bola enfim chegasse, e o
+      // boneco fazia algo que ninguém mais estava pedindo.
       this.queuedPass = {
-        pointer: pointer,
+        pointer: { worldX: pointer.worldX, worldY: pointer.worldY },
         passType: passType,
+        em: this.time.now,
       };
       return;
     }
@@ -2268,6 +2343,36 @@ class GameScene extends Phaser.Scene {
     return best;
   }
 
+  /**
+   * PORTA ÚNICA da câmera de jogo. Sem ela, "seguir o jogador" estava cravado
+   * em seis lugares (troca de jogador, expulsão, fim do pan do chute, fim do
+   * replay, volta da rede) e qualquer modo novo de câmera duraria até a
+   * próxima troca de jogador.
+   *
+   * Sem argumento, REAPLICA o modo atual — é assim que os pontos de "volta a
+   * seguir" respeitam a escolha do jogador em vez de forçarem o boneco.
+   */
+  seguirCamera(modo) {
+    if (modo) this.cameraAlvo = modo;
+    const alvo = this.cameraAlvo === "bola" ? this.ball : this.player;
+    if (!alvo || !this.cameras || !this.cameras.main) return;
+    const lerp = this.cameraAlvo === "bola" ? CAMERA.LERP_BOLA : CAMERA.LERP_JOGADOR;
+    this.cameras.main.startFollow(alvo, true, lerp, lerp);
+  }
+
+  /** Z: alterna entre seguir o boneco e seguir a bola. */
+  alternarCamera() {
+    if (this.isGameOver) return;
+    this.seguirCamera(this.cameraAlvo === "bola" ? "jogador" : "bola");
+    const alvo = this.cameraAlvo === "bola" ? this.ball : this.player;
+    this.showFloatingText(
+      alvo.x,
+      alvo.y - 60,
+      this.cameraAlvo === "bola" ? "CÂMERA: BOLA" : "CÂMERA: JOGADOR",
+      "#7fd4ff",
+    );
+  }
+
   switchPlayer(targetPlayer = null) {
     // Only allow switching if controlMode is full
     if (this.controlMode !== "full") return;
@@ -2294,8 +2399,9 @@ class GameScene extends Phaser.Scene {
     newPlayer.isUserControlled = true;
     // Now, swap the reference!
     this.player = newPlayer;
-    // Make camera follow new player!
-    this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+    // Câmera pela porta única: se o jogador escolheu seguir a BOLA, trocar de
+    // boneco não pode arrastá-la de volta para o boneco.
+    this.seguirCamera();
     // Update indicator!
     this.playerIndicator.setPosition(this.player.x, this.player.y - 40);
     // Cancel any ongoing kick charge!
@@ -2322,7 +2428,20 @@ class GameScene extends Phaser.Scene {
   executeChargedKick(pointer, curveAmount = 0) {
     if (this.isGameOver) return;
     if (!this.player.isChargingKick) return;
-    if (!this.ball || this.ball.owner !== this.player) return;
+    if (!this.ball) return;
+    // Soltou o chute com a bola CHEGANDO: o comando espera por ela (mesma
+    // janela do passe). Antes ele era descartado em silêncio e chute de
+    // primeira dependia de acertar o frame exato do domínio.
+    if (this.ball.owner !== this.player) {
+      this.queuedPass = {
+        pointer: { worldX: pointer.worldX, worldY: pointer.worldY },
+        chute: true,
+        forca: 22,
+        em: this.time.now,
+      };
+      this.cancelKickCharge();
+      return;
+    }
 
     if (this.player.currentStamina < this.player.kickStaminaCost) {
       this.cancelKickCharge();
@@ -2395,6 +2514,24 @@ class GameScene extends Phaser.Scene {
     const isPlayerTeamScored =
       (!this.isSecondHalf && goalSide === "top") ||
       (this.isSecondHalf && goalSide === "bottom");
+
+    // Rede primeiro, estádio depois: é a ordem em que se ouve na arquibancada.
+    Som.tocar("rede");
+    Som.explodirTorcida(isPlayerTeamScored);
+
+    // O gol precisa PESAR. Congelar por um instante quem está em campo é o que
+    // o replay sozinho não entrega: ele mostra de novo, mas não marca o
+    // momento. Mesmo hitstop do roubo de bola, um pouco mais longo.
+    // Congela só o AUTOR, nunca pela porta do `applyHitStop`: ela guarda e
+    // devolve a velocidade da BOLA 110ms depois, e nesse meio tempo o gol já
+    // repôs a bola no meio — a devolução mandaria a bola parada disparar
+    // sozinha. Aqui o congelamento é do boneco e mais nada.
+    const autor = this.lastTouch;
+    if (autor) {
+      autor.hitStopTimer = GAME_FEEL.GOAL_HITSTOP_MS;
+      autor.setTint(0xffffff);
+    }
+    EfeitosVisuais.tremer(this, GAME_FEEL.GOAL_SHAKE_MS, GAME_FEEL.GOAL_SHAKE_INTENSITY);
 
     if (isPlayerTeamScored) {
       this.scorePlayer += 1;
@@ -2645,6 +2782,7 @@ class GameScene extends Phaser.Scene {
         })
         .setOrigin(0.5)
         .setDepth(35);
+      Perspectiva.reta(label);
       label.targetEntity = entity;
 
       return label;
@@ -2704,6 +2842,12 @@ class GameScene extends Phaser.Scene {
 
   endGame() {
     this.isGameOver = true;
+    // A súmula viaja DENTRO de `matchStats` de propósito: ele já é repassado
+    // inteiro por `PenaltyShootoutScene` e `EndGameScene`, e um campo novo solto
+    // no `data` seria mais um a esquecer de repassar (já aconteceu aqui).
+    this.matchStats.cartoesAmarelos = this._cartoesAmarelos || 0;
+    this.matchStats.cartaoVermelho = !!this._cartaoVermelho;
+    this.matchStats.faltasSofridas = this._faltasSofridas || 0;
     this.ball.body.setVelocity(0, 0);
     if (this.player.customVel) this.player.customVel.set(0, 0);
     // Tira o HUD na hora; o mesmo teardown roda de novo no shutdown da cena.
@@ -2716,7 +2860,7 @@ class GameScene extends Phaser.Scene {
       this.matchType === "libertadores";
     const isDraw = this.scorePlayer === this.scoreOpponent;
 
-    this.time.delayedCall(1500, () => {
+    this.time.delayedCall(GAME_FEEL.ENDGAME_DELAY_MS, () => {
       if (isKnockoutMatch && isDraw && !this.isExhibition) {
         // Disputa de pênaltis (apenas em carreira)
         this.scene.start("PenaltyShootoutScene", {
@@ -2847,6 +2991,12 @@ class GameScene extends Phaser.Scene {
       : !this.isSecondHalf;
     const penalti = this.dentroDaArea(vitima.x, vitima.y, defendeEsquerda);
 
+    Som.tocar("apito");
+    // Súmula do USUÁRIO: o que ele sofreu vira risco de lesão na carreira, e o
+    // que ele cometeu vira cartão acumulado. "Usuário" é o boneco que está no
+    // comando na hora — é o que ele fez com a bola no pé dele.
+    if (vitima === this.player)
+      this._faltasSofridas = (this._faltasSofridas || 0) + (carrinho ? 2 : 1);
     this.cartaoPor(infrator, carrinho);
     if (infrator === this.player)
       this.updateMatchRating(penalti ? -0.6 : -0.3, "Falta");
@@ -2896,6 +3046,11 @@ class GameScene extends Phaser.Scene {
     infrator.amarelos = (infrator.amarelos || 0) + 1;
     this.desenharCartoes(infrator);
     const vermelho = infrator.amarelos >= 2;
+    Som.tocar("cartao", { vermelho });
+    if (infrator === this.player) {
+      if (vermelho) this._cartaoVermelho = true;
+      else this._cartoesAmarelos = (this._cartoesAmarelos || 0) + 1;
+    }
     this.showFloatingText(
       infrator.x,
       infrator.y - 58,
@@ -2926,10 +3081,13 @@ class GameScene extends Phaser.Scene {
     entity.cardMarks = [];
     for (let i = 0; i < (entity.amarelos || 0); i++) {
       entity.cardMarks.push(
-        this.add
-          .rectangle(entity.x, entity.y, CARD_HUD.W, CARD_HUD.H, CARD_HUD.YELLOW)
-          .setStrokeStyle(1, 0x000000)
-          .setDepth(36),
+        // O cartão está DE PÉ acima do boneco, não deitado no gramado.
+        Perspectiva.reta(
+          this.add
+            .rectangle(entity.x, entity.y, CARD_HUD.W, CARD_HUD.H, CARD_HUD.YELLOW)
+            .setStrokeStyle(1, 0x000000)
+            .setDepth(36),
+        ),
       );
     }
     this.updateAthleteNameLabels();
@@ -2950,7 +3108,7 @@ class GameScene extends Phaser.Scene {
       this.player = this.playerTeam[0];
       this.player.isUserControlled = true;
       this.currentPlayerIndex = 0;
-      this.cameras.main.startFollow(this.player, true, 0.08, 0.08);
+      this.seguirCamera();
       this.cancelKickCharge();
     }
 
@@ -2982,7 +3140,7 @@ class GameScene extends Phaser.Scene {
 
   setupSetPiece(type, side, possessionTeam) {
     // 1. Iniciar Fade Out para esconder o teletransporte e reposicionamento
-    this.cameras.main.fadeOut(400, 0, 0, 0);
+    this.cameras.main.fadeOut(GAME_FEEL.SETPIECE_FADE_OUT_MS, 0, 0, 0);
 
     this.cameras.main.once("camerafadeoutcomplete", () => {
       this.gameState = type;
@@ -3101,7 +3259,7 @@ class GameScene extends Phaser.Scene {
       this.cameras.main.startFollow(this.ball, true, 0.05, 0.05);
 
       // 3. Fade In para revelar o novo cenário
-      this.cameras.main.fadeIn(600, 0, 0, 0);
+      this.cameras.main.fadeIn(GAME_FEEL.SETPIECE_FADE_IN_MS, 0, 0, 0);
 
       let label = "BOLA PARADA";
       if (type === GameStates.THROW_IN) label = "LATERAL";
@@ -3113,7 +3271,7 @@ class GameScene extends Phaser.Scene {
 
       // IA cobrando após o fade in (Inimigos OU Aliados se o jogador não for o dono)
       if (closest && closest !== this.player) {
-        this.time.delayedCall(1800, () => {
+        this.time.delayedCall(GAME_FEEL.SETPIECE_AI_DELAY_MS, () => {
           if (
             this.gameState !== GameStates.PLAYING &&
             this.ball.owner === closest
@@ -3385,4 +3543,37 @@ console.assert(
     );
   })(),
   "GameScene: arbitragem fora do lugar (área do pênalti ou cartão)",
+);
+
+// =============================================================================
+// Check: o BUFFER de input. Ele existe para o jogo responder ao que o jogador
+// quis, não ao frame em que apertou — e o prazo existe para o boneco não
+// executar, dez segundos depois, um comando que ninguém mais está pedindo.
+// =============================================================================
+console.assert(
+  (() => {
+    if (typeof GAME_FEEL === "undefined") return true;
+    const dentro = GAME_FEEL.INPUT_BUFFER_MS;
+
+    // A regra é a comparação de idade do pedido, isolada aqui.
+    const valido = (idade) => idade <= dentro;
+
+    return (
+      // Uma janela existe e é curta: buffer longo vira "o boneco tem vida
+      // própria"; curto demais não ajuda ninguém.
+      dentro >= 80 &&
+      dentro <= 400 &&
+      valido(0) &&
+      valido(dentro) &&
+      !valido(dentro + 1) &&
+      !valido(10000) &&
+      // As esperas de bola parada encurtaram, mas não a ponto de o jogador não
+      // ver o que aconteceu.
+      GAME_FEEL.SETPIECE_FADE_OUT_MS >= 120 &&
+      GAME_FEEL.SETPIECE_AI_DELAY_MS >= 400 &&
+      GAME_FEEL.SETPIECE_AI_DELAY_MS < 1800 &&
+      GAME_FEEL.ENDGAME_DELAY_MS < 1500
+    );
+  })(),
+  "GameScene: janela do buffer de input ou ritmo da bola parada fora do lugar",
 );

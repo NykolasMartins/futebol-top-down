@@ -24,9 +24,11 @@ class CareerMode {
     this.level = 1;
     this.xp = 0;
     this.skillPoints = 0;
-    this.speed = 68;
-    this.kickPower = 68;
-    this.stamina = 72;
+    // Da constante, não cravado: `CAREER_BASE.START_*` existia aqui do lado e
+    // ninguém lia — mexer nele não mudava o jogo. É o clássico da casa.
+    this.speed = CAREER_BASE.START_SPEED;
+    this.kickPower = CAREER_BASE.START_KICK_POWER;
+    this.stamina = CAREER_BASE.START_STAMINA;
     this.skinColor = 0xffdbac;
     this.hairColor = HAIR_COLORS[0];
     this.position = "Meia";
@@ -137,6 +139,27 @@ class CareerMode {
     // Tática do time do usuário. Escolhida no menu de pausa da partida e
     // guardada aqui para valer no jogo seguinte.
     this.tactic = TACTICS.T3_1;
+
+    // Idade e contrato do usuário. O contrato é um RELÓGIO: sem prazo, o
+    // mercado era só "recebo proposta aleatória"; com ele, o último ano vira
+    // decisão — renovar, esperar proposta ou sair de graça.
+    this.age = CAREER_BASE.START_AGE;
+    this.contractYears = CAREER_BASE.CONTRACT_YEARS;
+
+    // Seleção nacional: convocação, jogos e gols. As partidas da seleção são
+    // SIMULADAS (ver `_janelaDeSelecao`) — jogá-las exigiria um terceiro tipo
+    // de compromisso no calendário, e `type` é literal comparado pelas cenas.
+    this.national = { called: false, caps: 0, goals: 0, seasons: 0 };
+
+    // Prêmios individuais e a história ano a ano (seção "HISTÓRICO" do perfil).
+    this.awards = [];
+    this.history = [];
+
+    // Disciplina e lesão: o que acontece EM CAMPO passa a custar fora dele.
+    // `suspended` e `injuryDays` entram por `getLineupStatus()` — a porta que
+    // já decide se o jogador entra, entra no 2º tempo ou nem é relacionado.
+    this.discipline = { yellows: 0, reds: 0, suspended: 0 };
+    this.injuryDays = 0;
 
     // Mercado de transferências
     this.transferOffers = [];
@@ -627,12 +650,76 @@ class CareerMode {
    * chave de REAL_ROSTERS/TEAMS_DB e circulam por todo o código; ponto único
    * para eles não vazarem crus na tela.
    */
+  // ───────────────────────────────────────────────────────────────────────────
+  // SLOTS DE SAVE
+  // ───────────────────────────────────────────────────────────────────────────
+  // Havia UMA chave no localStorage: começar carreira nova apagava a anterior
+  // sem aviso e sem volta. Agora são três, e o SLOT 1 continua na chave antiga
+  // de propósito — quem já tem carreira salva não perde nada ao atualizar.
+
+  static CHAVE_BASE = "phaser_football_career";
+  static CHAVE_SLOT_ATIVO = "carreira_slot";
+  static SLOTS = 3;
+
+  /** Slot em uso. Vive no localStorage para sobreviver ao recarregar a página. */
+  static slotAtivo() {
+    const n = parseInt(localStorage.getItem(CareerMode.CHAVE_SLOT_ATIVO), 10);
+    return n >= 1 && n <= CareerMode.SLOTS ? n : 1;
+  }
+
+  static usarSlot(n) {
+    const slot = n >= 1 && n <= CareerMode.SLOTS ? n : 1;
+    localStorage.setItem(CareerMode.CHAVE_SLOT_ATIVO, String(slot));
+    return slot;
+  }
+
+  /** Slot 1 fica na chave SEM sufixo: é a compatibilidade com o save antigo. */
+  static chaveDoSlot(n) {
+    const slot = n || CareerMode.slotAtivo();
+    return slot === 1
+      ? CareerMode.CHAVE_BASE
+      : `${CareerMode.CHAVE_BASE}_${slot}`;
+  }
+
+  /** Resumo dos três slots para a tela de carregar. Nunca lança. */
+  static resumoDosSlots() {
+    const lista = [];
+    for (let n = 1; n <= CareerMode.SLOTS; n++) {
+      const item = { slot: n, existe: false };
+      try {
+        const bruto = JSON.parse(localStorage.getItem(CareerMode.chaveDoSlot(n)));
+        if (bruto && bruto.playerName) {
+          item.existe = true;
+          item.playerName = bruto.playerName;
+          item.level = bruto.level || 1;
+          item.season = bruto.season || 1;
+          item.club = CareerMode.clubLabel(
+            (bruto.currentTeam && bruto.currentTeam.name) || "",
+          );
+        }
+      } catch (erro) {
+        /* save corrompido conta como slot vazio */
+      }
+      lista.push(item);
+    }
+    return lista;
+  }
+
+  static apagarSlot(n) {
+    localStorage.removeItem(CareerMode.chaveDoSlot(n));
+  }
+
   static clubLabel(clubId) {
     // Só ID (string) entra. Proposta de save antigo trazia o OBJETO do clube
     // aqui e o HTML recebia "[object Object]" — o "undefined" da tela.
     if (typeof clubId !== "string" || !clubId) {
       return clubId && clubId.name ? CareerMode.clubLabel(clubId.name) : "A definir";
     }
+    // Seleção também é "clube" para a UI: sem isto a tela mostrava
+    // "selecao_brasil", que é o mesmo vazamento de ID que este método existe
+    // para tapar.
+    if (typeof NATIONAL_TEAMS !== "undefined" && NATIONAL_TEAMS[clubId])
+      return NATIONAL_TEAMS[clubId].label;
     const c = typeof findClub === "function" ? findClub(clubId) : null;
     return c ? c.name : clubId;
   }
@@ -774,6 +861,17 @@ class CareerMode {
     }
     if (!this.worldSeed) this.worldSeed = Math.floor(Math.random() * 1e9);
 
+    // Elenco vivo: o save manda quando existe (ele guarda idade e rating já
+    // envelhecidos), senão o mundo nasce do banco com idade derivada do id.
+    // Antes da tabela e do calendário porque a força dos clubes sai daqui.
+    if (typeof Elenco !== "undefined") {
+      if (this._elencoMundo) {
+        Elenco.carregar(this._elencoMundo);
+        this._elencoMundo = null;
+      }
+      Elenco.iniciar(this.worldSeed);
+    }
+
     this.world = {
       season: new SeasonManager(this.worldSeed),
       calendar: new CalendarManager(new Date(this.startDate)),
@@ -845,11 +943,635 @@ class CareerMode {
 
     // Rodadas reais do calendário, não a conta teórica da tabela.
     if (rodada > 0) this.totalMatches = rodada;
+
+    this._agendarSelecao(anterior);
+  }
+
+  /**
+   * Janelas de SELEÇÃO no calendário do usuário. Só para quem foi convocado, e
+   * sempre em dia livre com folga dos dois lados — a seleção não pode empurrar
+   * jogo de clube, que é o calendário de verdade do mundo.
+   *
+   * `type: "selecao"` é o TERCEIRO literal estrutural do schedule (havia
+   * "brasileirao" e "copa") e as cenas o comparam: quem mexer aqui varre
+   * `PreGameScene` e `EndGameScene` junto.
+   */
+  _agendarSelecao(anterior) {
+    if (!this.national || !this.national.called) return;
+    const minha = this.nationalTeam();
+    if (!minha) return;
+
+    const ocupados = new Set();
+    this.schedule.forEach((e) => {
+      ocupados.add(e.dayOffset - 1);
+      ocupados.add(e.dayOffset);
+      ocupados.add(e.dayOffset + 1);
+    });
+
+    const rivais = Object.keys(NATIONAL_TEAMS).filter((k) => k !== minha.id);
+    // Em ano de Copa as datas viram as FASES do mata-mata: o adversário sai da
+    // chave (`jogoDoMundial`) e não de um sorteio de amistoso.
+    const copa = this.ehAnoDeMundial() ? this.mundialAtual() : null;
+    const total = copa
+      ? Math.ceil(Math.log2(Math.max(2, (copa.rounds[0] || []).length * 2)))
+      : CAREER_BASE.NATIONAL_WINDOWS;
+
+    // A régua é o TAMANHO REAL da temporada, não um 320 chutado. Com o número
+    // fixo a última data caía DEPOIS do último jogo do mundo — um compromisso
+    // que nunca chega, e que deixava `hasRemainingMatches()` eternamente true:
+    // o botão de simular o resto sumia e a tela dizia "próximo jogo" de um jogo
+    // que não existia. Fim de temporada em ~214 dias contra régua de 320.
+    const fimDoAno = this.lastFixtureDay();
+    if (fimDoAno <= 1) return;
+    const passo = Math.floor(fimDoAno / (total + 1));
+    let marcados = 0;
+
+    for (let i = 1; i <= total; i++) {
+      // Procura um dia livre a partir do alvo, andando para a frente.
+      let dia = i * passo;
+      let tentativas = 0;
+      while (ocupados.has(dia) && tentativas < 30) {
+        dia++;
+        tentativas++;
+      }
+      // Data que escorregou para fora da temporada é descartada: melhor uma
+      // convocação a menos do que um compromisso que nunca chega.
+      if (ocupados.has(dia) || dia >= fimDoAno) continue;
+      ocupados.add(dia - 1);
+      ocupados.add(dia);
+      ocupados.add(dia + 1);
+
+      // Na Copa o rival só existe quando a fase anterior termina: fica nulo e
+      // `getSelecaoOpponent` o resolve no dia, pela chave.
+      const rival = copa ? null : rivais[(i - 1) % rivais.length];
+      this.schedule.push({
+        dayOffset: dia,
+        type: "selecao",
+        matchIndex: 0,
+        opponentId: rival,
+        isHome: i % 2 === 1,
+        competitionName: copa ? MUNDIAL.NOME : "Data FIFA",
+        matchType: "selecao",
+        played: !!(
+          (anterior || []).find(
+            (e) => e.dayOffset === dia && e.type === "selecao",
+          ) || {}
+        ).played,
+      });
+      marcados++;
+    }
+
+    if (marcados) this.schedule.sort((a, b) => a.dayOffset - b.dayOffset);
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // COPA DO MUNDO
+  // ───────────────────────────────────────────────────────────────────────────
+  // O chaveamento mora AQUI, e não em `world.season.tournaments`, porque aquilo
+  // é o mundo dos CLUBES: as seleções não existem lá, não têm tabela e não
+  // recebem vaga continental. O invariante que proíbe bracket local vale para
+  // copa de clube — este é outro domínio, com outro dono.
+
+  ehAnoDeMundial() {
+    return this.season % MUNDIAL.A_CADA === 0;
+  }
+
+  /**
+   * Monta a chave: as seleções, semeadas por força de elenco, completadas com
+   * BYE até a potência de 2 — um BYE por confronto, nunca empilhados no fim
+   * (empilhado, meia chave nasce vazia e alguém chega à final sem jogar).
+   */
+  _montarMundial() {
+    const ids = Object.keys(NATIONAL_TEAMS);
+    const forca = (id) => {
+      const e = window.getTeamRoster ? window.getTeamRoster(id) : [];
+      return e.length ? e.reduce((s, j) => s + j.rating, 0) / e.length : 70;
+    };
+    const times = ids.slice().sort((a, b) => forca(b) - forca(a));
+
+    let tamanho = 1;
+    while (tamanho < times.length) tamanho *= 2;
+    const byes = tamanho - times.length;
+
+    const primeira = [];
+    let i = 0;
+    for (let c = 0; c < tamanho / 2; c++) {
+      const home = times[i++] || null;
+      // Os primeiros `byes` confrontos são walkover — o cabeça passa direto.
+      const away = c < byes ? null : times[i++] || null;
+      primeira.push({ home, away, winner: away ? null : home });
+    }
+
+    this.mundial = {
+      season: this.season,
+      round: 0,
+      rounds: [primeira],
+      champion: null,
+    };
+    return this.mundial;
+  }
+
+  /** A chave do ano, criando-a na primeira pergunta. */
+  mundialAtual() {
+    if (!this.ehAnoDeMundial()) return null;
+    if (!this.mundial || this.mundial.season !== this.season)
+      this._montarMundial();
+    return this.mundial;
+  }
+
+  /** O confronto do usuário na fase atual, se ele ainda estiver vivo. */
+  jogoDoMundial() {
+    const m = this.mundialAtual();
+    const minha = this.nationalTeam();
+    if (!m || !minha || m.champion) return null;
+    const rodada = m.rounds[m.round] || [];
+    return (
+      rodada.find(
+        (j) => !j.winner && (j.home === minha.id || j.away === minha.id),
+      ) || null
+    );
+  }
+
+  /** Nome da fase, contado de trás para frente (Final, Semifinal, Quartas…). */
+  faseDoMundial() {
+    const m = this.mundialAtual();
+    if (!m) return null;
+    const jogos = (m.rounds[m.round] || []).length;
+    if (jogos <= 1) return "Final";
+    if (jogos === 2) return "Semifinal";
+    if (jogos <= 4) return "Quartas de final";
+    return `Fase de ${jogos * 2}`;
+  }
+
+  /**
+   * Fecha a rodada: grava o resultado do usuário, simula os outros confrontos
+   * e monta a fase seguinte. Sem isto a chave nunca anda e a Copa fica parada
+   * na primeira fase para sempre.
+   */
+  _avancarMundial(vitoriaDoUsuario) {
+    const m = this.mundialAtual();
+    const minha = this.nationalTeam();
+    if (!m || !minha) return;
+    const rodada = m.rounds[m.round] || [];
+
+    rodada.forEach((jogo) => {
+      if (jogo.winner) return;
+      const ehMeu = jogo.home === minha.id || jogo.away === minha.id;
+      if (ehMeu) {
+        const rival = jogo.home === minha.id ? jogo.away : jogo.home;
+        jogo.winner = vitoriaDoUsuario ? minha.id : rival;
+        return;
+      }
+      // Os outros: o mesmo simulador dos jogos de fundo, com o PRNG do mundo.
+      const rand = this.world ? () => this.world.season._rand() : Math.random;
+      // `MatchSimulator.js` carrega DEPOIS deste arquivo: no boot (e no check)
+      // o global ainda não existe. A moeda pesada pelo rating cobre esse
+      // instante sem acoplar a ordem dos <script> a uma regra de jogo.
+      if (typeof simulateMatch === "function") {
+        const placar = simulateMatch(jogo.home, jogo.away, rand);
+        jogo.winner = placar.isDraw
+          ? rand() < 0.5
+            ? jogo.home
+            : jogo.away
+          : placar.winnerId;
+      } else {
+        jogo.winner = rand() < 0.5 ? jogo.home : jogo.away;
+      }
+    });
+
+    const vencedores = rodada.map((j) => j.winner).filter(Boolean);
+    if (vencedores.length <= 1) {
+      m.champion = vencedores[0] || null;
+      this._premiarMundial(m.champion === minha.id);
+      return;
+    }
+    const proxima = [];
+    for (let i = 0; i < vencedores.length; i += 2)
+      proxima.push({
+        home: vencedores[i],
+        away: vencedores[i + 1] || null,
+        winner: vencedores[i + 1] ? null : vencedores[i],
+      });
+    m.rounds.push(proxima);
+    m.round += 1;
+  }
+
+  /**
+   * O usuário caiu: as datas restantes da Copa somem do calendário dele. Sem
+   * isto o jogo pediria para ele jogar uma semifinal em que não está — e o
+   * painel de dia de jogo ficaria sem adversário.
+   */
+  _encerrarMundialDoUsuario() {
+    this.schedule
+      .filter(
+        (e) =>
+          e.type === "selecao" &&
+          !e.played &&
+          e.dayOffset > this.currentDayOffset,
+      )
+      .forEach((e) => (e.played = true));
+    this.addNotification(
+      `🌍 Eliminado da ${MUNDIAL.NOME}. A campanha da sua seleção acabou aqui.`,
+      "news",
+    );
+  }
+
+  _premiarMundial(euCampeao) {
+    if (!euCampeao) {
+      this.addNotification(
+        `🌍 ${MUNDIAL.NOME} encerrada. Sua seleção não levou o título desta vez.`,
+        "news",
+      );
+      return;
+    }
+    const minha = this.nationalTeam();
+    this.trophies.push({ title: MUNDIAL.NOME, season: this.season });
+    this.awards.push({
+      title: `Campeão da ${MUNDIAL.NOME}`,
+      season: this.season,
+      // Sem `?.` aqui o título de campeão do mundo derrubava o registro da
+      // partida — e a tela de pós-jogo parava no meio, o que na prática é o
+      // jogo travado. Seleção que não resolve não pode custar o troféu.
+      club: (minha && minha.label) || null,
+    });
+    this.coachReputation = Math.min(100, this.coachReputation + 10);
+    this.addNotification(
+      `🏆🌍 CAMPEÃO DA ${MUNDIAL.NOME.toUpperCase()}! Temporada ${this.season}`,
+      "news",
+    );
+  }
+
+  /** A seleção do usuário. Vem da NACIONALIDADE, não do clube atual: quem sai
+   *  do Brasil para o Bayern continua jogando pelo Brasil. */
+  nationalTeam() {
+    if (typeof nationalTeamOfCountry !== "function") return null;
+    // A nacionalidade é decidida na PRIMEIRA vez e congelada no save: derivar
+    // do clube toda vez faria o jogador trocar de seleção junto com a
+    // transferência, o que é o oposto do que uma seleção é.
+    if (!this.nationality) this.nationality = this.currentLeague || "Brasil";
+    return nationalTeamOfCountry(this.nationality);
+  }
+
+  /** Adversário de uma data FIFA, no mesmo formato de um time de tabela. */
+  getSelecaoOpponent(evento) {
+    const alvo =
+      evento ||
+      this.schedule.find(
+        (e) => e.dayOffset === this.currentDayOffset && e.type === "selecao",
+      );
+    if (!alvo) return null;
+    // Copa do Mundo: o rival é quem sobrou do outro lado da chave. Sem jogo
+    // (eliminado, ou copa encerrada) devolve `null` — e a tela cai no painel
+    // de dia livre, com o AVANÇAR DIA.
+    let rivalId = alvo.opponentId;
+    if (this.ehAnoDeMundial()) {
+      const jogo = this.jogoDoMundial();
+      const minha = this.nationalTeam();
+      if (!jogo || !minha) return null;
+      rivalId = jogo.home === minha.id ? jogo.away : jogo.home;
+    }
+    const dados = NATIONAL_TEAMS[rivalId];
+    if (!dados) return null;
+    const kit = TEAMS_DB[rivalId] || {};
+    const elenco = window.getTeamRoster ? window.getTeamRoster(rivalId) : [];
+    const rating = elenco.length
+      ? Math.round(elenco.reduce((s, j) => s + j.rating, 0) / elenco.length)
+      : 78;
+    return {
+      name: rivalId,
+      label: dados.label,
+      rating,
+      tier: 5,
+      shirtColor: kit.shirt1,
+      shirtColor2: kit.shirt2,
+    };
+  }
+
+  /**
+   * Registro de uma data FIFA. Não mexe em tabela nem em artilharia da liga —
+   * é jogo de seleção: conta caps, gols e desgaste, e nada mais.
+   */
+  recordSelecaoMatch(result) {
+    this._pesarPartidaNoCorpo(result);
+    const gols = (result.matchStats && result.matchStats.goals) || 0;
+    this.national.caps += 1;
+    this.national.goals += gols;
+    this.condition = Math.max(
+      0,
+      this.condition - CAREER_BASE.FATIGUE_PER_MATCH * 0.8,
+    );
+    this.addNotification(
+      gols > 0
+        ? `🌎 ${gols} ${gols === 1 ? "gol" : "gols"} pela Seleção! Já são ${this.national.caps} jogos.`
+        : `🌎 Mais um jogo pela Seleção (${this.national.caps} no total).`,
+      "news",
+    );
+    if ((result.matchRating || 0) >= 7.5)
+      this.adjustCoachReputation(3, "grande atuação pela seleção");
+
+    // Copa do Mundo: a partida decide a fase. Empate no mata-mata cai no
+    // critério do pênalti que o resto do jogo já usa (quem venceu vem por ID).
+    if (this.ehAnoDeMundial()) {
+      const minha = this.nationalTeam();
+      const venci =
+        result.playerScore > result.opponentScore ||
+        (result.playerScore === result.opponentScore &&
+          result.penaltyWinnerId === (minha && minha.id));
+      this._avancarMundial(venci);
+      if (!venci) this._encerrarMundialDoUsuario();
+    }
+    this._markFixturePlayed(
+      this.schedule.find(
+        (e) => e.dayOffset === this.currentDayOffset && e.type === "selecao",
+      ),
+    );
+    this.saveToLocalStorage();
   }
 
   // ─────────────────────────────────────────────────────────────────────────────
   // Navegação de calendário
   // ─────────────────────────────────────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
+  // FIM DE TEMPORADA: prêmio, história, seleção e contrato
+  // ───────────────────────────────────────────────────────────────────────────
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // DISCIPLINA E LESÃO — o que acontece em campo cobra fora dele
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Súmula da partida. Amarelo acumula na temporada e a cada
+   * `DISCIPLINE.YELLOWS_PER_BAN` custa um jogo; vermelho custa
+   * `DISCIPLINE.RED_BAN_MATCHES` na hora. O contador zera ao gerar a suspensão
+   * — senão o 4º amarelo suspenderia de novo, e o 5º outra vez.
+   */
+  /**
+   * O que a partida cobrou do corpo e da ficha. Ponto único chamado por
+   * `recordMatch` e `recordCopaMatch` — toda partida do usuário passa por um
+   * dos dois, inclusive a que ele não jogou (é lá que a suspensão é cumprida).
+   */
+  _pesarPartidaNoCorpo(result) {
+    this._cumprirSuspensao(result && result.lineupStatus);
+    // Quem não entrou não leva cartão nem se machuca.
+    if (!result || result.lineupStatus === "not_related") return;
+    this._aplicarDisciplina(result.matchStats);
+    this._avaliarLesao(result.matchStats);
+  }
+
+  _aplicarDisciplina(stats) {
+    if (!stats) return;
+    const d = this.discipline;
+    const amarelos = stats.cartoesAmarelos || 0;
+    const vermelho = !!stats.cartaoVermelho;
+    if (!amarelos && !vermelho) return;
+
+    d.yellows += amarelos;
+    if (vermelho) {
+      d.reds += 1;
+      d.suspended += DISCIPLINE.RED_BAN_MATCHES;
+      this.addNotification(
+        `🟥 Expulso! Você cumpre ${DISCIPLINE.RED_BAN_MATCHES} jogos de suspensão.`,
+        "news",
+      );
+      this.adjustCoachReputation(-8, "expulso em campo");
+    }
+    while (d.yellows >= DISCIPLINE.YELLOWS_PER_BAN) {
+      d.yellows -= DISCIPLINE.YELLOWS_PER_BAN;
+      d.suspended += 1;
+      this.addNotification(
+        `🟨 ${DISCIPLINE.YELLOWS_PER_BAN}º cartão amarelo: você está suspenso do próximo jogo.`,
+        "news",
+      );
+    }
+    this.saveToLocalStorage();
+  }
+
+  /**
+   * Risco de lesão. Sai do que a partida REALMENTE teve — pancada tomada e
+   * fôlego no fim — e não de um dado solto: quem joga inteiro, cansado e
+   * apanhando, se machuca; quem administra, não. O carrinho sofrido conta
+   * dobrado (ver `chamarFalta`).
+   */
+  _avaliarLesao(stats) {
+    if (this.injuryDays > 0) return;
+    const pancada = (stats && stats.faltasSofridas) || 0;
+    const desgaste = Math.max(0, (DISCIPLINE.FIT_SAFE - this.condition) / 100);
+    const risco = Math.min(
+      DISCIPLINE.INJURY_RISK_MAX,
+      pancada * DISCIPLINE.INJURY_PER_FOUL + desgaste * DISCIPLINE.INJURY_PER_FATIGUE,
+    );
+    if (Math.random() >= risco) return;
+
+    this.injuryDays =
+      DISCIPLINE.INJURY_DAYS_MIN +
+      Math.floor(
+        Math.random() *
+          (DISCIPLINE.INJURY_DAYS_MAX - DISCIPLINE.INJURY_DAYS_MIN + 1),
+      );
+    this.condition = Math.min(this.condition, 45);
+    this.addNotification(
+      `🩹 Você se machucou na partida: ${this.injuryDays} dias fora.`,
+      "news",
+    );
+    this.saveToLocalStorage();
+  }
+
+  /**
+   * Um jogo de suspensão é cumprido pela partida PERDIDA, não pela jogada.
+   * Chamado no registro do jogo, que é o único ponto por onde toda partida do
+   * usuário passa — inclusive a que ele não jogou.
+   */
+  _cumprirSuspensao(lineupStatus) {
+    if (!this.discipline || this.discipline.suspended <= 0) return;
+    if (lineupStatus !== "not_related") return;
+    this.discipline.suspended -= 1;
+    if (this.discipline.suspended === 0)
+      this.addNotification("✅ Suspensão cumprida: você está liberado.", "news");
+  }
+
+  /** Nota geral do usuário: a média dos três atributos. Régua de tudo aqui. */
+  overall() {
+    return Math.round((this.speed + this.kickPower + this.stamina) / 3);
+  }
+
+  /**
+   * Fecha o ano do USUÁRIO. Ordem importa: os prêmios leem as estatísticas da
+   * temporada, a história guarda o que os prêmios decidiram, e só então o
+   * relógio anda (idade e contrato).
+   */
+  _fecharTemporada() {
+    if (!this.playerStats) return;
+    const premios = this._premiosDaTemporada();
+    const selecao = this._janelaDeSelecao();
+
+    // Posição final na liga, para a linha do histórico ter contexto.
+    const tabela = (this.leagueTable || [])
+      .slice()
+      .sort((a, b) => (b.points || 0) - (a.points || 0));
+    const posicao = tabela.findIndex((t) => t.isPlayerTeam) + 1;
+
+    this.history.push({
+      season: this.season,
+      age: this.age,
+      club: this.currentTeam ? this.currentTeam.name : null,
+      league: this.playerLeagueName ? this.playerLeagueName() : null,
+      position: posicao > 0 ? posicao : null,
+      matches: this.playerStats.matches || 0,
+      goals: this.playerStats.goals || 0,
+      assists: this.playerStats.assists || 0,
+      overall: this.overall(),
+      // Só os títulos DESTE ano: `trophies` é acumulado da carreira inteira.
+      trophies: (this.trophies || [])
+        .filter((t) => t.season === this.season)
+        .map((t) => t.title),
+      awards: premios,
+      national: selecao,
+    });
+
+    this._virarContrato();
+    this.age += 1;
+  }
+
+  /**
+   * Prêmios individuais. Saem dos números que o mundo JÁ grava (`topScorers` e
+   * `leagueTable`) — nada de placar paralelo. Devolve os títulos do ano e
+   * empilha em `awards`, que é a vitrine da carreira.
+   */
+  _premiosDaTemporada() {
+    const ganhos = [];
+    const lista = this.topScorers || [];
+    const golsDoUsuario = (this.playerStats && this.playerStats.goals) || 0;
+
+    // Artilheiro: primeiro da lista E com gol no ano (liderar com 0 não é
+    // artilharia, é tabela vazia).
+    if (lista.length && lista[0] && lista[0].isPlayer && golsDoUsuario > 0)
+      ganhos.push("Artilheiro do campeonato");
+    // Craque do campeonato: campeão da liga e entre os 3 primeiros da lista.
+    const campeao = (this.leagueTable || [])
+      .slice()
+      .sort((a, b) => (b.points || 0) - (a.points || 0))[0];
+    const top3 = lista.slice(0, 3).some((p) => p && p.isPlayer);
+    if (campeao && campeao.isPlayerTeam && top3)
+      ganhos.push("Craque do campeonato");
+    // Revelação: só até os 21, e uma vez na vida.
+    if (
+      this.age <= 21 &&
+      golsDoUsuario >= 5 &&
+      !this.awards.some((a) => a.title === "Revelação do ano")
+    )
+      ganhos.push("Revelação do ano");
+
+    ganhos.forEach((title) => {
+      this.awards.push({ title, season: this.season, club: this.currentTeam?.name });
+      this.addNotification(`🏅 ${title} — temporada ${this.season}!`, "news");
+    });
+    return ganhos;
+  }
+
+  /**
+   * Seleção nacional. As partidas são SIMULADAS, não jogadas: um terceiro tipo
+   * de compromisso no calendário obrigaria a mexer no literal `type`, que as
+   * cenas comparam — e o retorno seria pequeno perto do risco. Aqui a
+   * convocação vale como reconhecimento: jogos, gols e reputação.
+   */
+  _janelaDeSelecao() {
+    const nota = this.overall();
+    const convocado = nota >= CAREER_BASE.NATIONAL_CALL_RATING;
+    this.national.called = convocado;
+    if (!convocado) return null;
+
+    // Só a parte NÃO jogada da janela: as datas FIFA que entraram no calendário
+    // já foram contadas em `recordSelecaoMatch`. Sem este desconto o jogador
+    // ganharia os amistosos duas vezes.
+    const jogos = Math.max(
+      0,
+      CAREER_BASE.NATIONAL_MATCHES_PER_SEASON - CAREER_BASE.NATIONAL_WINDOWS,
+    );
+    if (jogos === 0) {
+      this.national.seasons += 1;
+      this.coachReputation = Math.min(100, this.coachReputation + 3);
+      return { matches: 0, goals: 0 };
+    }
+    // Gols proporcionais ao que ele fez no clube, com teto: quem não faz gol no
+    // clube não vira artilheiro de seleção por sorteio.
+    const ritmo =
+      (this.playerStats.goals || 0) / Math.max(this.playerStats.matches || 1, 1);
+    const gols = Math.min(jogos, Math.round(ritmo * jogos));
+
+    this.national.caps += jogos;
+    this.national.goals += gols;
+    this.national.seasons += 1;
+    this.coachReputation = Math.min(100, this.coachReputation + 3);
+
+    this.addNotification(
+      this.national.seasons === 1
+        ? `📣 Você foi convocado para a Seleção pela primeira vez!`
+        : `📣 Convocado de novo: ${jogos} jogos e ${gols} gols pela Seleção.`,
+      "news",
+    );
+    return { matches: jogos, goals: gols };
+  }
+
+  /**
+   * Anda um ano no contrato. No ÚLTIMO ano o mercado é avisado — é isso que
+   * transforma proposta em decisão. Contrato vencido não expulsa ninguém do
+   * clube: ele vira pressão, e quem decide é o jogador no mercado.
+   */
+  _virarContrato() {
+    this.contractYears = Math.max(0, (this.contractYears || 0) - 1);
+    if (this.contractYears === 1) {
+      this.addNotification(
+        `📄 Seu contrato com o ${CareerMode.clubLabel(this.currentTeam?.name)} termina no fim da próxima temporada.`,
+        "news",
+      );
+    } else if (this.contractYears === 0) {
+      this.transferWindowOpen = true;
+      this.addNotification(
+        `📄 Contrato encerrado. Você está livre para negociar — o mercado está aberto.`,
+        "news",
+      );
+    }
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // O MUNDO ENVELHECE (ver js/systems/Elenco.js)
+  // ───────────────────────────────────────────────────────────────────────────
+  /**
+   * Vira o ano para os 504 jogadores do mundo e transforma o resultado em
+   * notícia. Só as aposentadorias e revelações da LIGA DO USUÁRIO viram texto:
+   * o mundo inteiro produziria dezenas de linhas que ninguém lê.
+   */
+  _envelhecerMundo() {
+    if (typeof Elenco === "undefined" || !Elenco.mundo) return;
+
+    const gols = {};
+    Object.keys(this.globalPlayerStats || {}).forEach((id) => {
+      gols[id] = this.globalPlayerStats[id].goals || 0;
+    });
+
+    const { aposentados, revelacoes } = Elenco.virarTemporada(gols);
+    const meusClubes = new Set(this.playerLeagueClubs().map((t) => t.name));
+
+    aposentados
+      .filter((a) => meusClubes.has(a.clube))
+      .slice(0, 3)
+      .forEach((a) =>
+        this.addNotification(
+          `${a.nome} (${a.clube}) pendurou as chuteiras aos ${a.idade} anos.`,
+          "news",
+        ),
+      );
+    revelacoes
+      .filter((r) => meusClubes.has(r.clube))
+      .slice(0, 2)
+      .forEach((r) =>
+        this.addNotification(
+          `${r.clube} promove ${r.nome}, ${r.idade} anos, da base.`,
+          "news",
+        ),
+      );
+  }
+
   addNotification(text, type = "info") {
     if (!this.notifications) this.notifications = [];
     if (!this.newsHistory) this.newsHistory = [];
@@ -983,10 +1705,30 @@ class CareerMode {
     ) {
       this.adjustCoachReputation(-2, "faltou ao treino do dia");
     }
+    // Jogo do usuário HOJE que ele não jogou no controle: é simulado COM ele em
+    // campo, exatamente como na simulação da temporada. Antes o dia passava e a
+    // partida era resolvida sem ele — zero gol, zero assistência, zero XP, como
+    // se ele não estivesse no elenco. Tem de vir ANTES do `_simulateWorldDay`,
+    // que é quem marcaria o jogo como resolvido sem dar nada a ele.
+    const jogoDeHoje = this.schedule.find(
+      (e) =>
+        e.dayOffset === this.currentDayOffset &&
+        !e.played &&
+        e.type !== "selecao",
+    );
+    if (jogoDeHoje) this._resolverPartidaDoUsuario(jogoDeHoje);
+
     // O mundo joga a rodada do dia que está terminando, antes do relógio virar.
     this._simulateWorldDay();
     this.currentDayOffset++;
     this.generateNews(); // Gera notícia ao avançar o dia
+    // Recuperação da lesão anda no RELÓGIO, não no calendário de jogos: é a
+    // única coisa da carreira que passa mesmo quando não há partida nenhuma.
+    if (this.injuryDays > 0) {
+      this.injuryDays--;
+      if (this.injuryDays === 0)
+        this.addNotification("🩹 Recuperado! Liberado para treinar e jogar.", "news");
+    }
     this.condition = Math.min(100, this.condition + 3);
     this._checkSalary();
     this._checkTransferWindow();
@@ -1047,29 +1789,31 @@ class CareerMode {
   }
 
   simulateUntil(targetDayOffset) {
-    let skippedGames = 0;
-    let totalFine = 0;
-    let totalRepLoss = 0;
+    // Antes/depois: o relatório sai da diferença, e não de contadores paralelos
+    // que precisariam ser mantidos em sincronia com o registro da partida.
+    const antes = {
+      jogos: this.playerStats.matches,
+      gols: this.playerStats.goals,
+      assistencias: this.playerStats.assists,
+      xp: this.xp,
+      nivel: this.level,
+    };
 
     while (this.currentDayOffset <= targetDayOffset) {
       const event = this.schedule.find(
         (e) => e.dayOffset === this.currentDayOffset,
       );
-      // Faltou ao próprio jogo: multa e reputação. Um só critério para liga e
-      // copa — `played` só é falso se ele realmente não jogou (o
-      // `_simulateWorldDay` logo abaixo resolve a partida e marca).
-      if (event && !event.played) {
-        const fine = Math.floor(this.monthlySalary * 0.25);
-        totalFine += fine;
-        totalRepLoss += 20;
-        skippedGames++;
-        this.playerMoney = Math.max(0, this.playerMoney - fine);
-        // Silenciar a notificação individual aqui
-        this.adjustCoachReputation(
-          -20,
-          "falta injustificada a dia de jogo",
-          true,
-        );
+      // SIMULAR a temporada é jogá-la, não faltar a ela: o usuário entra em
+      // campo, o placar sai do mesmo simulador dos jogos de fundo e a
+      // participação dele é sorteada SOBRE esse placar. Gol, assistência, XP,
+      // nível, condição, reputação, artilharia, cartão e lesão entram pelo
+      // mesmo caminho de uma partida jogada — ver `_resolverPartidaDoUsuario`.
+      //
+      // A multa por falta continua existindo, mas agora só onde ela faz
+      // sentido: quem PULA o dia no `advanceDay` tendo jogo para jogar. Data
+      // FIFA nunca cobra multa de clube.
+      if (event && !event.played && event.type !== "selecao") {
+        this._resolverPartidaDoUsuario(event);
       }
       // `matchDay` anda no `_markFixturePlayed`, dentro do `_simulateWorldDay`
       // logo abaixo — um caminho só para jogo jogado e jogo pulado.
@@ -1077,7 +1821,22 @@ class CareerMode {
       // tem confronto marcado em dias que o schedule dele nem lista.
       this._simulateWorldDay();
       this.currentDayOffset++;
-      this.condition = Math.min(100, this.condition + 3);
+      // Dia SEM jogo numa temporada simulada é dia de descanso: o jogador
+      // automático não clica em "descansar", e com só +3 ele terminava o ano
+      // com a condição no chão — o que joga `getLineupStatus` para
+      // `not_related` e faz um atacante 82 passar a temporada inteira fora.
+      // Com jogo no dia, o cansaço da partida já foi cobrado no registro.
+      const teveJogo = !!(event && event.type !== "selecao");
+      this.condition = Math.min(
+        100,
+        this.condition + (teveJogo ? 3 : CAREER_BASE.SIM_REST_PER_DAY),
+      );
+      // A LESÃO TAMBÉM PASSA AQUI. Este laço não chama `advanceDay`, e sem
+      // esta linha quem se machucava no meio de uma temporada simulada não
+      // curava nunca: ficava `not_related` até o fim do ano, sem gol, com a
+      // reputação escorrendo -1 por partida. Um atacante 85 terminava o ano
+      // com zero gols e reputação zero — e nada no console dizia por quê.
+      if (this.injuryDays > 0) this.injuryDays--;
       this._checkSalary();
 
       // Checar fim de temporada durante a simulação
@@ -1087,17 +1846,139 @@ class CareerMode {
       }
     }
 
-    // Notificação unificada se houveram faltas
-    if (skippedGames > 0) {
-      this.notifications.push({
-        type: "penalty",
-        msg: `⚠️ RELATÓRIO DE ABSÊNCIA: Você faltou a ${skippedGames} partida(s). 
-Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} de reputação com o técnico.`,
-        day: this.currentDayOffset,
-      });
+    // Relatório do que a simulação rendeu A ELE. Antes daqui saía um aviso de
+    // ABSÊNCIA — o jogo tratava simular a temporada como faltar a ela.
+    const jogos = this.playerStats.matches - antes.jogos;
+    if (jogos > 0) {
+      const gols = this.playerStats.goals - antes.gols;
+      const assistencias = this.playerStats.assists - antes.assistencias;
+      const niveis = this.level - antes.nivel;
+      this.addNotification(
+        `📋 ${jogos} ${jogos === 1 ? "partida simulada" : "partidas simuladas"}: ` +
+          `${gols} ${gols === 1 ? "gol" : "gols"}, ${assistencias} ${assistencias === 1 ? "assistência" : "assistências"}` +
+          `, +${this.xp - antes.xp} XP` +
+          (niveis > 0 ? ` e ${niveis} ${niveis === 1 ? "nível" : "níveis"}!` : "."),
+        "news",
+      );
     }
 
     this.saveToLocalStorage();
+  }
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // TEMPORADA SIMULADA — com o usuário DENTRO da partida
+  // ───────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Quanto o usuário produziu numa partida que ele não jogou no controle.
+   *
+   * O modelo é distribuir os gols que o TIME fez: para cada gol, sorteia-se se
+   * foi ele, se ele deu a assistência, ou se foi coisa dos companheiros. Isso
+   * amarra o número à realidade da partida — com o placar 1x0 ele não tem como
+   * marcar três, que é o defeito de qualquer fórmula que sorteie gols do nada.
+   *
+   * O sorteio usa o PRNG do mundo: a mesma `worldSeed` reproduz a mesma
+   * temporada, inclusive a artilharia.
+   */
+  _desempenhoSimulado(golsDoTime, lineupStatus) {
+    const rand = this.world ? () => this.world.season._rand() : Math.random;
+    const pos = String(this.position || "MEIA").toUpperCase();
+    // Quem joga na frente finaliza mais. É a única coisa que a posição decide.
+    const FATIA = { ATACANTE: 0.45, PIVOT: 0.42, WING: 0.3, MEIA: 0.28, FIXO: 0.12 };
+    const base = FATIA[pos] !== undefined ? FATIA[pos] : 0.28;
+    // A nota move a fatia: um 85 finaliza mais que um 65 no mesmo time.
+    const peso = base * (1 + (this.overall() - 70) / 120);
+    // Reserva entra no 2º tempo: metade do jogo, metade das chances.
+    const corte = lineupStatus === "bench" ? 0.5 : 1;
+
+    let gols = 0;
+    let assistencias = 0;
+    for (let i = 0; i < golsDoTime; i++) {
+      if (rand() < peso * corte) gols++;
+      else if (rand() < 0.28 * corte) assistencias++;
+    }
+    return { gols, assistencias, rand };
+  }
+
+  /**
+   * Resolve uma partida do usuário SEM ele no controle, mas com ele em campo:
+   * placar pelo mesmo simulador dos jogos de fundo, e a participação dele
+   * sorteada sobre esse placar. O resultado entra pelo MESMO caminho de uma
+   * partida jogada (`recordMatch`/`recordCopaMatch`), então gols, assistências,
+   * XP, nível, condição, reputação, artilharia, cartão e lesão saem de graça —
+   * nada disso é reimplementado aqui.
+   */
+  _resolverPartidaDoUsuario(entrada) {
+    if (!entrada || entrada.played) return false;
+    const meuClube = this.currentTeam && this.currentTeam.name;
+    const rival = entrada.opponentId;
+    if (!meuClube || !rival) return false;
+
+    const lineup = this.getLineupStatus
+      ? this.getLineupStatus()
+      : { code: "starter" };
+
+    const rand = this.world ? () => this.world.season._rand() : Math.random;
+    const placar =
+      typeof simulateMatch === "function"
+        ? simulateMatch(
+            entrada.isHome ? meuClube : rival,
+            entrada.isHome ? rival : meuClube,
+            rand,
+          )
+        : { homeScore: 0, awayScore: 0 };
+    const meus = entrada.isHome ? placar.homeScore : placar.awayScore;
+    const deles = entrada.isHome ? placar.awayScore : placar.homeScore;
+
+    // Suspenso ou lesionado não entra: o time joga sem ele e ele não pontua.
+    const jogou = lineup.code !== "not_related";
+    const { gols, assistencias } = jogou
+      ? this._desempenhoSimulado(meus, lineup.code)
+      : { gols: 0, assistencias: 0 };
+
+    let nota = 6.0;
+    if (jogou) {
+      // A base acompanha a QUALIDADE do jogador. Com 6.0 fixo, metade das
+      // partidas caía abaixo de 6 e a reputação com o técnico ia a zero em
+      // qualquer temporada simulada — o atacante 82 terminava o ano no banco
+      // por ter jogado bem o ano inteiro.
+      // Piso de 5.7: começando em 56 de overall, a base pura daria 5.26 e
+      // QUASE toda partida cairia abaixo de 5.5 — o novato perdia reputação
+      // por existir e vivia no banco sem ter feito nada errado. O teto evita o
+      // contrário: nota alta de graça só porque o atributo é alto.
+      const base = Math.max(5.7, Math.min(7.2, 5.9 + (this.overall() - 70) / 22));
+      nota =
+        base +
+        gols * 0.9 +
+        assistencias * 0.5 +
+        (meus > deles ? 0.5 : meus < deles ? -0.35 : 0) +
+        (rand() - 0.5) * 0.6;
+      nota = Math.max(3, Math.min(10, Math.round(nota * 10) / 10));
+    }
+
+    const result = {
+      playerScore: meus,
+      opponentScore: deles,
+      opponent: rival,
+      matchRating: jogou ? nota : 5.2,
+      lineupStatus: lineup.code,
+      autoSimulated: true,
+      matchStats: {
+        goals: gols,
+        assists: assistencias,
+        passes: 0,
+        shots: gols + (rand() < 0.5 ? 1 : 0),
+        // A partida simulada também machuca e também dá cartão: sem isto,
+        // simular o ano seria o jeito de nunca levar suspensão nem lesão.
+        cartoesAmarelos: jogou && rand() < 0.12 ? 1 : 0,
+        cartaoVermelho: jogou && rand() < 0.015,
+        faltasSofridas: jogou ? Math.floor(rand() * 5) : 0,
+      },
+    };
+
+    if (entrada.type === "copa") this.recordCopaMatch(result);
+    else this.recordMatch(result);
+    return true;
   }
 
   applyNoShowPenalty() {
@@ -1286,6 +2167,12 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
   train() {
     if (this.lastActivityDay === this.currentDayOffset)
       return { success: false, msg: "Já realizou uma atividade hoje!" };
+    // Lesionado descansa, não treina — é o mesmo critério do fôlego no chão.
+    if (this.injuryDays > 0)
+      return {
+        success: false,
+        msg: `Lesionado: ${this.injuryDays} dias fora. Só descanso.`,
+      };
     if (this.condition < 20)
       return { success: false, msg: "Muito cansado para treinar!" };
     this.xp += 35;
@@ -1301,6 +2188,11 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
     // Chamado pelos mini-games ao concluir
     if (this.lastActivityDay === this.currentDayOffset)
       return { success: false, msg: "Já realizou uma atividade hoje!" };
+    if (this.injuryDays > 0)
+      return {
+        success: false,
+        msg: `Lesionado: ${this.injuryDays} dias fora. Só descanso.`,
+      };
     this.xp += xpBonus;
     this.condition = Math.max(20, this.condition - 20);
     this.lastActivityDay = this.currentDayOffset;
@@ -1330,10 +2222,19 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
   // ─────────────────────────────────────────────────────────────────────────────
   // Progressão de nível
   // ─────────────────────────────────────────────────────────────────────────────
+  /**
+   * Quanto XP custa o PRÓXIMO nível. Porta única — a barra de XP de quatro
+   * telas lê daqui, senão elas continuariam desenhando `/100` para sempre.
+   */
+  xpParaSubir(nivel) {
+    const n = nivel || this.level || 1;
+    return CAREER_BASE.XP_BASE + (n - 1) * CAREER_BASE.XP_POR_NIVEL;
+  }
+
   checkLevelUp() {
-    while (this.xp >= 100) {
+    while (this.xp >= this.xpParaSubir()) {
+      this.xp -= this.xpParaSubir();
       this.level++;
-      this.xp -= 100;
       this.skillPoints++;
       if (this.level % 3 === 0) {
         this.speed = Math.min(100, this.speed + 1);
@@ -1375,6 +2276,28 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
   }
 
   getLineupStatus() {
+    // Suspensão e lesão vêm ANTES de qualquer conta de forma: por melhor que
+    // esteja, quem está suspenso ou machucado não entra. Entram por aqui, e
+    // não numa checagem nova espalhada pelas telas, porque esta função já é a
+    // única porta que decide se o jogador joga.
+    if (this.discipline && this.discipline.suspended > 0) {
+      const jogos = this.discipline.suspended;
+      return {
+        code: "not_related",
+        label: "Suspenso",
+        description: `Cumprindo suspensão: ${jogos} ${jogos === 1 ? "jogo" : "jogos"}. A partida é simulada.`,
+        reason: "suspended",
+      };
+    }
+    if (this.injuryDays > 0) {
+      return {
+        code: "not_related",
+        label: "Lesionado",
+        description: `No departamento médico por mais ${this.injuryDays} ${this.injuryDays === 1 ? "dia" : "dias"}. A partida é simulada.`,
+        reason: "injured",
+      };
+    }
+
     const fitness = this.condition || 0;
     const reputation =
       this.coachReputation === undefined ? 50 : this.coachReputation;
@@ -1566,6 +2489,8 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       return this.recordCopaMatch(result);
     }
 
+    this._pesarPartidaNoCorpo(result);
+
     const pTeam = this.leagueTable.find((t) => t.isPlayerTeam);
     const oTeam = this.leagueTable.find((t) => t.name === result.opponent);
 
@@ -1657,6 +2582,7 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
   // Registro de partida da Copa do Brasil
   // ─────────────────────────────────────────────────────────────────────────────
   recordCopaMatch(result) {
+    this._pesarPartidaNoCorpo(result);
     const goals = result.matchStats ? result.matchStats.goals : 0;
     const assists = result.matchStats ? result.matchStats.assists : 0;
     const rating = result.matchRating || 6.0;
@@ -1763,6 +2689,15 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
         this.world.season.recordCupResult(f.competition, f.home, f.away, placar);
       }
     }
+    // Data FIFA que o dia passou sem ele jogar: ninguém mais a resolve — ela
+    // não existe no calendário do MUNDO, que é o que este laço percorre. Sem
+    // isto ela ficava "não jogada" para sempre e o `simulateUntil` cobrava
+    // multa e reputação por falta a um jogo de SELEÇÃO, que não é do clube.
+    const fifaDeHoje = this.schedule.find(
+      (e) => e.dayOffset === dayOffset && e.type === "selecao" && !e.played,
+    );
+    if (fifaDeHoje) this._markFixturePlayed(fifaDeHoje);
+
     // Quem venceu hoje ganha adversário e data da fase seguinte.
     const novasFases = this.world.calendar.resolveCupWindows(
       this.world.season,
@@ -1965,6 +2900,21 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
   }
 
   startNewSeason() {
+    // ANTES de qualquer reset: prêmios, história, seleção, contrato e
+    // aniversário do usuário leem os números da temporada que acabou, e as
+    // linhas abaixo zeram justamente esses números.
+    //
+    // E o fechamento NÃO pode impedir a virada. Ele é contabilidade — prêmio,
+    // histórico, convocação, contrato; se qualquer uma dessas contas falhar
+    // (save antigo com campo faltando, seleção que não resolve), o ano tem de
+    // virar do mesmo jeito. Sem isto, um erro aqui deixa o jogador preso na
+    // temporada para sempre, com o botão respondendo nada.
+    try {
+      this._fecharTemporada();
+    } catch (erro) {
+      console.error("Fechamento da temporada falhou; virando o ano assim mesmo:", erro);
+    }
+
     this.season++;
     this.matchDay = 1;
     this.seasonEnded = false;
@@ -1988,6 +2938,16 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
     // quem vai à Champions e à Libertadores no ano novo.
     this._lastSeasonTables = this.world ? this.world.season.tables : null;
     this.world = null;
+
+    // O MUNDO ENVELHECE aqui, e só aqui. Tem de ser antes de recriar tabela e
+    // estatísticas: as duas leem rating de elenco, e leriam o elenco do ano
+    // passado. Quem fez gol na temporada evolui mais — é o único acoplamento
+    // entre o que foi jogado e o que o mundo vira.
+    try {
+      this._envelhecerMundo();
+    } catch (erro) {
+      console.error("Envelhecimento do mundo falhou; a temporada segue:", erro);
+    }
 
     // Resetar tabela e agenda
     this.initializeLeagueTable();
@@ -2154,6 +3114,13 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       signingBonus: isRenewal ? 0 : salary * 3,
       bonus,
       rating: club.rating || 75,
+      // Duração do vínculo. Clube grande amarra por mais tempo; renovação
+      // devolve o prazo cheio. Campo PLANO, como todo o resto da proposta.
+      contractYears: isRenewal
+        ? CAREER_BASE.CONTRACT_YEARS
+        : (club.tier || 3) >= 4
+          ? CAREER_BASE.CONTRACT_YEARS + 1
+          : CAREER_BASE.CONTRACT_YEARS,
       isRenewal,
     };
   }
@@ -2230,6 +3197,9 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       players: [{ name: this.playerName, rating: 75 }],
     };
     this.monthlySalary = offer.salary;
+    // Assinar zera o relógio do contrato — inclusive na renovação, que é
+    // exatamente o que o jogador está comprando ao aceitar.
+    this.contractYears = offer.contractYears || CAREER_BASE.CONTRACT_YEARS;
     if (offer.signingBonus) {
       this.playerMoney += offer.signingBonus;
       this.addNotification(
@@ -2329,6 +3299,21 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       topScorers: this.topScorers,
       transferOffers: this.transferOffers,
       tactic: this.tactic,
+      age: this.age,
+      contractYears: this.contractYears,
+      discipline: this.discipline,
+      injuryDays: this.injuryDays,
+      nationality: this.nationality,
+      mundial: this.mundial,
+      national: this.national,
+      awards: this.awards,
+      history: this.history,
+      // O mundo vivo: a `worldSeed` regenera calendário e chaveamento, mas NÃO
+      // regenera idade e rating já envelhecidos — isso é estado, não derivação.
+      _elencoMundo:
+        typeof Elenco !== "undefined" && Elenco.mundo
+          ? Elenco.paraSalvar()
+          : this._elencoMundo,
       playerMoney: this.playerMoney,
       monthlySalary: this.monthlySalary,
       lastSalaryDay: this.lastSalaryDay,
@@ -2338,11 +3323,11 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       completedObjectivesCount: this.completedObjectivesCount || 0,
       transferWindowOpen: this.transferWindowOpen,
     };
-    localStorage.setItem("phaser_football_career", JSON.stringify(data));
+    localStorage.setItem(CareerMode.chaveDoSlot(), JSON.stringify(data));
   }
 
   loadFromLocalStorage() {
-    const raw = localStorage.getItem("phaser_football_career");
+    const raw = localStorage.getItem(CareerMode.chaveDoSlot());
     if (!raw) return false;
     try {
       const data = JSON.parse(raw);
@@ -2383,6 +3368,50 @@ Prejuízo: R$ ${totalFine.toLocaleString("pt-BR")} em multas e -${totalRepLoss} 
       // load, como manda a regra do estado persistido.
       if (!Object.values(TACTICS).includes(this.tactic))
         this.tactic = TACTICS.T3_1;
+
+      // Carreira, contrato e seleção: save antigo não tem nada disso, e o
+      // formato antigo não pode virar `undefined` no meio de uma conta.
+      if (!Number.isFinite(this.age)) this.age = CAREER_BASE.START_AGE;
+      if (!Number.isFinite(this.contractYears))
+        this.contractYears = CAREER_BASE.CONTRACT_YEARS;
+      if (!this.national || typeof this.national !== "object")
+        this.national = { called: false, caps: 0, goals: 0, seasons: 0 };
+      if (!this.discipline || typeof this.discipline !== "object")
+        this.discipline = { yellows: 0, reds: 0, suspended: 0 };
+      ["yellows", "reds", "suspended"].forEach((k) => {
+        if (!Number.isFinite(this.discipline[k])) this.discipline[k] = 0;
+      });
+      if (!Number.isFinite(this.injuryDays)) this.injuryDays = 0;
+      // Save antigo não tem nacionalidade, e um país sem seleção jogável aqui
+      // deixaria `nationalTeam()` nulo em todo lugar que o usa.
+      if (
+        typeof this.nationality !== "string" ||
+        (typeof nationalTeamOfCountry === "function" &&
+          !nationalTeamOfCountry(this.nationality))
+      ) {
+        this.nationality =
+          typeof nationalTeamOfCountry === "function" &&
+          nationalTeamOfCountry(this.currentLeague)
+            ? this.currentLeague
+            : "Brasil";
+      }
+      // Chave de Copa de OUTRA temporada é lixo: a do ano corrente se remonta
+      // sozinha na primeira pergunta (`mundialAtual`).
+      if (
+        !this.mundial ||
+        this.mundial.season !== this.season ||
+        !Array.isArray(this.mundial.rounds)
+      )
+        this.mundial = null;
+      ["caps", "goals", "seasons"].forEach((k) => {
+        if (!Number.isFinite(this.national[k])) this.national[k] = 0;
+      });
+      this.awards = (this.awards || []).filter(
+        (a) => a && typeof a.title === "string" && Number.isFinite(a.season),
+      );
+      this.history = (this.history || []).filter(
+        (h) => h && Number.isFinite(h.season) && Number.isFinite(h.goals),
+      );
       if (!this.currentTeam.tier) this.currentTeam.tier = 3;
       if (this.leagueTable) {
         this.leagueTable.forEach((t) => {
@@ -2579,4 +3608,498 @@ console.assert(
     );
   })(),
   "CareerMode: proposta ou clubLabel devolvendo objeto/undefined para a tela",
+);
+
+// =============================================================================
+// Check: o fim de temporada do usuário. São quatro relógios que só andam uma
+// vez por ano — errar aqui não aparece no console, aparece três temporadas
+// depois como "nunca ganhei nada" ou "meu contrato nunca acaba".
+// =============================================================================
+console.assert(
+  (() => {
+    if (typeof CAREER_BASE === "undefined") return true;
+
+    const fabricar = (mudanca) => {
+      const c = Object.create(CareerMode.prototype);
+      Object.assign(
+        c,
+        {
+          season: 3,
+          age: 24,
+          contractYears: 2,
+          speed: 80,
+          kickPower: 80,
+          stamina: 80,
+          coachReputation: 50,
+          currentTeam: { name: "Flamengo" },
+          currentLeague: "Brasil",
+          leagueTable: [
+            { name: "Flamengo", points: 40, isPlayerTeam: true },
+            { name: "Palmeiras", points: 30 },
+          ],
+          topScorers: [{ name: "Eu", goals: 12, isPlayer: true }],
+          playerStats: { matches: 30, goals: 12, assists: 5 },
+          trophies: [
+            { title: "Brasileirão", season: 3 },
+            { title: "Copa antiga", season: 1 },
+          ],
+          awards: [],
+          history: [],
+          national: { called: false, caps: 0, goals: 0, seasons: 0 },
+          transferWindowOpen: false,
+          notifications: [],
+          newsHistory: [],
+          currentDayOffset: 0,
+        },
+        mudanca || {},
+      );
+      c.playerLeagueName = () => "Brasileirão";
+      return c;
+    };
+
+    // Ano cheio: artilheiro + craque, história gravada, seleção e contrato.
+    const c = fabricar();
+    c._fecharTemporada();
+    const linha = c.history[0];
+
+    // Ano vazio: sem gol, sem prêmio — e liderar a artilharia com 0 não conta.
+    const seco = fabricar({
+      playerStats: { matches: 30, goals: 0, assists: 0 },
+      topScorers: [{ name: "Eu", goals: 0, isPlayer: true }],
+      leagueTable: [
+        { name: "Flamengo", points: 10, isPlayerTeam: true },
+        { name: "Palmeiras", points: 40 },
+      ],
+    });
+    seco._fecharTemporada();
+
+    // Reserva sem nível para a Seleção não é convocado.
+    const fraco = fabricar({ speed: 60, kickPower: 60, stamina: 60 });
+    fraco._fecharTemporada();
+
+    // Último ano de contrato: vira 0 e ABRE o mercado.
+    const acabando = fabricar({ contractYears: 1 });
+    acabando._fecharTemporada();
+
+    return (
+      // Prêmios do ano cheio, e nada no ano seco.
+      c.awards.map((a) => a.title).includes("Artilheiro do campeonato") &&
+      c.awards.map((a) => a.title).includes("Craque do campeonato") &&
+      seco.awards.length === 0 &&
+      // História: uma linha por temporada, com os títulos DAQUELE ano só.
+      c.history.length === 1 &&
+      linha.season === 3 &&
+      linha.goals === 12 &&
+      linha.position === 1 &&
+      linha.trophies.length === 1 &&
+      linha.trophies[0] === "Brasileirão" &&
+      // Seleção: convocado com nota, ignorado sem ela. No fim do ano entram
+      // apenas os amistosos NÃO jogados — as datas FIFA do calendário já
+      // contaram em `recordSelecaoMatch`, e contá-las de novo dobraria os caps.
+      c.national.caps ===
+        CAREER_BASE.NATIONAL_MATCHES_PER_SEASON - CAREER_BASE.NATIONAL_WINDOWS &&
+      c.national.seasons === 1 &&
+      c.national.goals >= 0 &&
+      fraco.national.caps === 0 &&
+      fraco.national.called === false &&
+      // Relógios: contrato desce, idade sobe, e o fim do vínculo abre a janela.
+      c.contractYears === 1 &&
+      c.age === 25 &&
+      acabando.contractYears === 0 &&
+      acabando.transferWindowOpen === true
+    );
+  })(),
+  "CareerMode: fim de temporada fora do lugar (prêmio, história, seleção ou contrato)",
+);
+
+// =============================================================================
+// Check: UMA atividade por dia. A trava é simples, mas quem a lê são três
+// funções e duas telas — bastou um `career.train()` solto antes do handler para
+// o jogador ver "já treinou hoje" no PRIMEIRO treino do dia, com o XP creditado
+// e a tela sem atualizar. O erro não aparece no console: aparece como mentira.
+// =============================================================================
+console.assert(
+  (() => {
+    const atleta = () => {
+      const c = Object.create(CareerMode.prototype);
+      Object.assign(c, {
+        currentDayOffset: 0,
+        lastActivityDay: -1,
+        condition: 100,
+        xp: 0,
+        level: 1,
+        nextLevelXP: 1000,
+        coachReputation: 50,
+        notifications: [],
+        newsHistory: [],
+      });
+      c.checkLevelUp = () => {};
+      c.adjustCoachReputation = () => {};
+      c.saveToLocalStorage = () => {};
+      return c;
+    };
+
+    const c = atleta();
+    const primeiro = c.train();
+    const segundo = c.train();
+    const descansoNoMesmoDia = c.rest();
+    c.currentDayOffset++;
+    const amanha = c.train();
+
+    // Descanso continua valendo com o fôlego no chão — é justamente para isso.
+    const exausto = atleta();
+    exausto.condition = 10;
+    const treinoExausto = exausto.train();
+    const descansoExausto = exausto.rest();
+
+    // O mini-game passa pela MESMA trava.
+    const c2 = atleta();
+    c2.train();
+    const miniDepois = c2.trainWithBonus(80);
+
+    return (
+      primeiro.success === true &&
+      segundo.success === false &&
+      descansoNoMesmoDia.success === false &&
+      amanha.success === true &&
+      treinoExausto.success === false &&
+      descansoExausto.success === true &&
+      miniDepois.success === false
+    );
+  })(),
+  "CareerMode: a trava de uma atividade por dia saiu do lugar",
+);
+
+// =============================================================================
+// Check: disciplina e lesão. O elo entre a partida e a temporada — errar aqui
+// não aparece no console, aparece como "levei vermelho e joguei no dia
+// seguinte" ou como uma suspensão que nunca acaba.
+// =============================================================================
+console.assert(
+  (() => {
+    if (typeof DISCIPLINE === "undefined") return true;
+    const atleta = (mud) => {
+      const c = Object.create(CareerMode.prototype);
+      Object.assign(
+        c,
+        {
+          condition: 100,
+          coachReputation: 80,
+          currentDayOffset: 5,
+          lastActivityDay: -1,
+          injuryDays: 0,
+          discipline: { yellows: 0, reds: 0, suspended: 0 },
+          notifications: [],
+          newsHistory: [],
+          xp: 0,
+        },
+        mud || {},
+      );
+      c.saveToLocalStorage = () => {};
+      c.adjustCoachReputation = () => {};
+      c.checkLevelUp = () => {};
+      return c;
+    };
+    const sumula = (a, v, f) => ({
+      cartoesAmarelos: a,
+      cartaoVermelho: !!v,
+      faltasSofridas: f || 0,
+    });
+
+    // Amarelo acumula e o 3º suspende, zerando o contador (senão o 4º
+    // suspenderia de novo, e o 5º outra vez).
+    const c = atleta();
+    c._aplicarDisciplina(sumula(2, false));
+    const antesDoTerceiro = { ...c.discipline };
+    c._aplicarDisciplina(sumula(1, false));
+    const depoisDoTerceiro = { ...c.discipline };
+
+    // Seis de uma vez valem DUAS suspensões, não uma.
+    const seis = atleta();
+    seis._aplicarDisciplina(sumula(6, false));
+
+    // Vermelho suspende na hora.
+    const expulso = atleta();
+    expulso._aplicarDisciplina(sumula(0, true));
+
+    // Suspenso e lesionado não entram, e a porta é `getLineupStatus`.
+    const susp = atleta({ discipline: { yellows: 0, reds: 0, suspended: 1 } });
+    const machucado = atleta({ injuryDays: 7 });
+    const inteiro = atleta();
+
+    // A suspensão é cumprida pela partida PERDIDA, não por uma jogada.
+    const cumprindo = atleta({ discipline: { yellows: 0, reds: 0, suspended: 2 } });
+    cumprindo._pesarPartidaNoCorpo({ lineupStatus: "not_related", matchStats: sumula(3, true) });
+    const aposFalta = { ...cumprindo.discipline };
+
+    // Lesionado descansa, não treina.
+    const semTreino = machucado.train();
+    const comDescanso = machucado.rest();
+
+    // Risco de lesão: partida tranquila não machuca ninguém.
+    const tranquilo = atleta();
+    tranquilo._avaliarLesao(sumula(0, false, 0));
+
+    return (
+      antesDoTerceiro.yellows === 2 &&
+      antesDoTerceiro.suspended === 0 &&
+      depoisDoTerceiro.yellows === 0 &&
+      depoisDoTerceiro.suspended === 1 &&
+      seis.discipline.suspended === 2 &&
+      expulso.discipline.suspended === DISCIPLINE.RED_BAN_MATCHES &&
+      susp.getLineupStatus().reason === "suspended" &&
+      susp.getLineupStatus().code === "not_related" &&
+      machucado.getLineupStatus().reason === "injured" &&
+      inteiro.getLineupStatus().code === "starter" &&
+      // Quem não entrou não leva cartão da partida que não jogou, e a
+      // suspensão anda um jogo.
+      aposFalta.suspended === 1 &&
+      aposFalta.yellows === 0 &&
+      semTreino.success === false &&
+      comDescanso.success === true &&
+      tranquilo.injuryDays === 0
+    );
+  })(),
+  "CareerMode: disciplina ou lesão fora do lugar (suspensão, cartão ou departamento médico)",
+);
+
+// =============================================================================
+// Check: a DATA FIFA. `type: "selecao"` é o terceiro literal estrutural do
+// schedule, e a regra que importa é uma só — ela nunca pode encostar num jogo
+// de clube. Uma data FIFA em cima da final da copa não dá erro: dá um dia com
+// dois jogos e um deles some.
+// =============================================================================
+console.assert(
+  (() => {
+    if (typeof NATIONAL_TEAMS === "undefined" || typeof CAREER_BASE === "undefined")
+      return true;
+
+    const c = Object.create(CareerMode.prototype);
+    c.nationality = "Brasil";
+    c.currentLeague = "Brasil";
+    c.national = { called: true, caps: 0, goals: 0, seasons: 0 };
+    // Calendário de clube denso, para a busca por dia livre ser exercitada.
+    c.schedule = [];
+    // Temporada de 220 dias, como uma de verdade: é ela que define a régua das
+    // datas FIFA, e foi o 320 chutado que punha a última fora do ano.
+    const fimDoAno = 220;
+    c.lastFixtureDay = () => fimDoAno;
+    for (let d = 3; d < fimDoAno; d += 7)
+      c.schedule.push({ dayOffset: d, type: "brasileirao", played: false });
+    const diasDeClube = c.schedule.map((e) => e.dayOffset);
+
+    c._agendarSelecao([]);
+    const datas = c.schedule.filter((e) => e.type === "selecao");
+
+    // Nenhuma data FIFA a menos de um dia de jogo de clube.
+    const encosta = datas.some((f) =>
+      diasDeClube.some((d) => Math.abs(d - f.dayOffset) <= 1),
+    );
+    // Ordenado por dia: a tela lê o schedule na ordem.
+    const ordenado = c.schedule.every(
+      (e, i, a) => i === 0 || a[i - 1].dayOffset <= e.dayOffset,
+    );
+    // Nunca joga contra a própria seleção.
+    const contraSiMesmo = datas.some((f) => f.opponentId === "selecao_brasil");
+
+    // Quem NÃO foi convocado não recebe data nenhuma.
+    const semConvocacao = Object.create(CareerMode.prototype);
+    semConvocacao.nationality = "Brasil";
+    semConvocacao.national = { called: false };
+    semConvocacao.schedule = [];
+    semConvocacao.lastFixtureDay = () => fimDoAno;
+    semConvocacao._agendarSelecao([]);
+
+    // O adversário sai no formato que as cenas consomem (nome, cor, rating).
+    const adv = c.getSelecaoOpponent(datas[0]);
+
+    return (
+      datas.length === CAREER_BASE.NATIONAL_WINDOWS &&
+      // NENHUMA data depois do fim da temporada: compromisso que nunca chega
+      // trava o botão de simular o resto e mente sobre o "próximo jogo".
+      datas.every((f) => f.dayOffset < fimDoAno) &&
+      !encosta &&
+      ordenado &&
+      !contraSiMesmo &&
+      datas.every((f) => f.matchType === "selecao" && f.played === false) &&
+      semConvocacao.schedule.length === 0 &&
+      !!adv &&
+      typeof adv.label === "string" &&
+      adv.label !== adv.name && // rótulo de exibição, não o ID
+      Number.isFinite(adv.rating)
+    );
+  })(),
+  "CareerMode: data FIFA fora do lugar (colidindo com jogo de clube ou sem adversário)",
+);
+
+// =============================================================================
+// Check: a COPA DO MUNDO. A chave anda uma vez por fase e a temporada inteira
+// depende disso — se ela não avança, o jogador fica preso na primeira fase; se
+// avança errado, alguém chega à final sem jogar (o bug clássico do BYE).
+// =============================================================================
+console.assert(
+  (() => {
+    if (typeof MUNDIAL === "undefined" || typeof NATIONAL_TEAMS === "undefined")
+      return true;
+
+    const c = Object.create(CareerMode.prototype);
+    Object.assign(c, {
+      season: MUNDIAL.A_CADA, // ano de Copa
+      nationality: "Brasil",
+      national: { called: true, caps: 0, goals: 0, seasons: 0 },
+      trophies: [],
+      awards: [],
+      schedule: [],
+      notifications: [],
+      newsHistory: [],
+      currentDayOffset: 0,
+      coachReputation: 50,
+      world: null,
+    });
+    c.addNotification = () => {};
+
+    const anoDeCopa = c.ehAnoDeMundial();
+    const m = c.mundialAtual();
+    const times = Object.keys(NATIONAL_TEAMS).length;
+    const primeira = m.rounds[0];
+
+    // A chave cobre TODO mundo, e o BYE vai um por confronto (nunca empilhado).
+    const nomes = new Set();
+    primeira.forEach((j) => {
+      if (j.home) nomes.add(j.home);
+      if (j.away) nomes.add(j.away);
+    });
+    const duploVazio = primeira.some((j) => !j.home && !j.away);
+
+    // Ano que NÃO é de Copa não tem chave nenhuma.
+    const semCopa = Object.create(CareerMode.prototype);
+    Object.assign(semCopa, { season: MUNDIAL.A_CADA + 1 });
+    const foraDeAno = semCopa.ehAnoDeMundial();
+
+    // Rodar até o fim: a chave tem de fechar com UM campeão.
+    let voltas = 0;
+    while (!c.mundial.champion && voltas < 10) {
+      c._avancarMundial(true); // o usuário vence sempre
+      voltas++;
+    }
+
+    return (
+      anoDeCopa &&
+      !foraDeAno &&
+      nomes.size === times &&
+      !duploVazio &&
+      // Potência de 2: 6 seleções viram 8 slots = 4 confrontos.
+      primeira.length * 2 >= times &&
+      (primeira.length & (primeira.length - 1)) === 0 &&
+      // Ganhando tudo, o campeão é a seleção do usuário — e sai troféu.
+      c.mundial.champion === "selecao_brasil" &&
+      c.trophies.some((t) => t.title === MUNDIAL.NOME) &&
+      c.awards.length === 1 &&
+      voltas <= 4
+    );
+  })(),
+  "CareerMode: Copa do Mundo fora do lugar (chave, BYE ou campeão)",
+);
+
+// =============================================================================
+// Check: a partida SIMULADA do usuário. O erro aqui não aparece no console —
+// aparece como "simulei a temporada e terminei com 0 gol" ou, pior, como um
+// atacante que marca mais gols do que o time inteiro fez.
+// =============================================================================
+console.assert(
+  (() => {
+    const atleta = (pos, nota, rand) => {
+      const c = Object.create(CareerMode.prototype);
+      Object.assign(c, {
+        position: pos,
+        speed: nota,
+        kickPower: nota,
+        stamina: nota,
+        world: null,
+      });
+      // PRNG fixo: aqui se mede a REGRA, não o sorteio.
+      c._desempenhoSimulado = CareerMode.prototype._desempenhoSimulado.bind(c);
+      const original = Math.random;
+      Math.random = () => rand;
+      const r = c._desempenhoSimulado(4, "starter");
+      Math.random = original;
+      return r;
+    };
+
+    // Sorte máxima: todo gol do time é dele — e NUNCA mais que isso.
+    const tudo = atleta("ATACANTE", 85, 0);
+    // Azar total: não marca e não assiste.
+    const nada = atleta("ATACANTE", 85, 0.999);
+    // A posição pesa: no mesmo sorteio, o atacante finaliza onde o fixo não.
+    const atacante = atleta("ATACANTE", 75, 0.4);
+    const fixo = atleta("FIXO", 75, 0.4);
+    // Reserva entra no 2º tempo: metade das chances.
+    const c = Object.create(CareerMode.prototype);
+    Object.assign(c, { position: "ATACANTE", speed: 85, kickPower: 85, stamina: 85, world: null });
+    const original = Math.random;
+    Math.random = () => 0.3;
+    const titular = c._desempenhoSimulado(4, "starter");
+    const reserva = c._desempenhoSimulado(4, "bench");
+    Math.random = original;
+
+    return (
+      // O teto é o placar: gol do usuário sai dos gols do TIME, nunca do nada.
+      tudo.gols === 4 &&
+      tudo.gols + tudo.assistencias <= 4 &&
+      nada.gols === 0 &&
+      nada.assistencias === 0 &&
+      atacante.gols > fixo.gols &&
+      titular.gols >= reserva.gols
+    );
+  })(),
+  "CareerMode: desempenho simulado fora do lugar (gol acima do placar ou posição ignorada)",
+);
+
+// =============================================================================
+// Check: a virada de temporada é INEGOCIÁVEL. Prêmio, histórico, convocação e
+// contrato são contabilidade do ano que acabou — se qualquer uma dessas contas
+// explodir (save antigo, seleção que não resolve), o ano tem de virar do mesmo
+// jeito. O sintoma de não virar é o pior possível: o botão responde nada e o
+// jogador fica preso na temporada para sempre.
+// =============================================================================
+console.assert(
+  (() => {
+    const c = Object.create(CareerMode.prototype);
+    Object.assign(c, {
+      season: 4,
+      matchDay: 30,
+      seasonEnded: true,
+      startDate: new Date(2026, 3, 1),
+      playerStats: { matches: 0, goals: 0, assists: 0 },
+      leagueTable: [],
+      trophies: [],
+      awards: [],
+      history: [],
+      notifications: [],
+      newsHistory: [],
+      schedule: [],
+      world: null,
+    });
+    // Contabilidade quebrada de propósito.
+    c._fecharTemporada = () => {
+      throw new Error("prêmio explodiu");
+    };
+    c._envelhecerMundo = () => {
+      throw new Error("mundo explodiu");
+    };
+    c.initializeLeagueTable = () => {};
+    c.initializeGlobalPlayerStats = () => {};
+    c.initializeTopScorers = () => {};
+    c.generateSchedule = () => {};
+    c.saveToLocalStorage = () => {};
+
+    const erroOriginal = console.error;
+    console.error = () => {};
+    c.startNewSeason();
+    console.error = erroOriginal;
+
+    // Virou o ano mesmo com as duas falhando.
+    return c.season === 5 && c.seasonEnded === false && c.matchDay === 1;
+  })(),
+  "CareerMode: a virada de temporada travou por causa da contabilidade do ano",
 );
